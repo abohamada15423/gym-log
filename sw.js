@@ -1,5 +1,5 @@
 // Gym Log Pro service worker: offline support, updates arrive when online.
-var CACHE="gymlog-v3";
+var CACHE="gymlog-v4";
 var SHELL=["./","index.html","manifest.webmanifest","icon-192.png","icon-512.png","apple-touch-icon.png"];
 self.addEventListener("install",function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(SHELL);}).then(function(){return self.skipWaiting();}));
