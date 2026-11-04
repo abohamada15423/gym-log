@@ -1982,6 +1982,75 @@
       .ico { width: 48px; height: 39px; }
       .hero { padding: 18px; }
     }
+    /* Studio refresh */
+    :root { --bg:#f2f3f0; --surface:#fff; --surface-2:#f5f6f3; --ink:#161b1a; --muted:#69736d; --line:#e4e9e3; --accent:#386a49; --accent-d:#173a29; --accent-ink:#fff; --soft:#e7f1e7; --gold:#bd7923; --gold-soft:#faf0df; --ok:#278457; --ok-soft:#e4f4e9; }
+    :root[data-theme="dark"] { --bg:#101815; --surface:#19231e; --surface-2:#202e26; --ink:#edf5ed; --muted:#a3b4a6; --line:#304238; --accent:#a9d8a2; --accent-d:#24543a; --accent-ink:#102015; --soft:#283d2e; --gold:#eec078; --gold-soft:#3c3220; --ok:#82d6a3; --ok-soft:#213b2b; }
+    @media (prefers-color-scheme:dark) { :root:not([data-theme="light"]):not([data-theme="dark"]) { --bg:#101815; --surface:#19231e; --surface-2:#202e26; --ink:#edf5ed; --muted:#a3b4a6; --line:#304238; --accent:#a9d8a2; --accent-d:#24543a; --accent-ink:#102015; --soft:#283d2e; --gold:#eec078; --gold-soft:#3c3220; --ok:#82d6a3; --ok-soft:#213b2b; } }
+    body { background:radial-gradient(ellipse at 50% -5%, color-mix(in srgb, var(--accent) 10%, var(--bg)), var(--bg) 42%); }
+    .app { max-width:620px; gap:20px; }
+    .top { min-height:52px; padding:4px 3px; }
+    .brand { font-size:1.55rem; letter-spacing:-.025em; }
+    .brand-badge { font-size:.58rem; padding:4px 7px; letter-spacing:.12em; }
+    .status { font-size:.69rem; }
+    .icon-btn { width:42px; height:42px; border-radius:14px; }
+    .view { gap:14px; }
+    .card { border-radius:22px; box-shadow:0 8px 26px rgba(20,46,27,.045); }
+    .hero { background:linear-gradient(130deg,#173b2b 0%,#28563a 58%,#4e7952 100%); padding:26px; border-radius:26px; box-shadow:0 16px 36px rgba(27,69,39,.22); }
+    .hero::after { width:210px; height:210px; right:-62px; top:-75px; border:1px solid rgba(255,255,255,.22); box-shadow:0 0 0 28px rgba(255,255,255,.035),0 0 0 56px rgba(255,255,255,.025); }
+    .hero-title { font-size:clamp(3.2rem,11vw,5rem); letter-spacing:-.035em; line-height:.9; }
+    .eyebrow { font-size:.65rem; letter-spacing:.15em; }
+    .hero-meta { margin-top:9px; color:rgba(255,255,255,.8); }
+    .wk-txt { position:relative; z-index:1; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.16); border-radius:16px; padding:12px; min-width:95px; }
+    .wk-txt b { font-size:1.9rem; }
+    .prog-wrap { background:rgba(10,30,20,.28); border:1px solid rgba(255,255,255,.08); border-radius:15px; }
+    .prog-fill { background:#c9e5a6; }
+    .chips-row { gap:8px; padding:2px 1px 5px; scroll-snap-type:x proximity; }
+    .day { min-width:100px; border-radius:17px; padding:12px 14px; scroll-snap-align:start; transition:background .2s,color .2s,transform .2s,border-color .2s; }
+    .day[aria-pressed="true"] { background:var(--ink); color:var(--bg); }
+    .day b { font-size:1.16rem; }
+    .workout-tools { padding:2px 0 6px; }
+    .workout-tools label { letter-spacing:.06em; }
+    .workout-tools .btn { font-size:.78rem; padding:11px 12px; border-radius:12px; }
+    h2 { letter-spacing:.015em; font-size:1.48rem; }
+    .workout-heading { padding:8px 2px 0; }
+    .workout-heading p { line-height:1.5; }
+    .ex { padding:18px; gap:14px; border-radius:22px; }
+    .ex.done { box-shadow:inset 4px 0 0 var(--ok),0 8px 26px rgba(20,46,27,.045); }
+    .ico { background:var(--soft); border:0; border-radius:15px; }
+    .ex-name { font-size:1.45rem; letter-spacing:.005em; }
+    .pill { font-size:.65rem; padding:4px 8px; }
+    .ex-count { margin-top:3px; }
+    .set-base-btn { border-radius:9px; padding:7px 9px; }
+    .last-box { background:var(--surface-2); border-color:transparent; border-radius:14px; }
+    .lchip { border-radius:9px; padding:6px 9px; }
+    .cols { padding-bottom:3px; }
+    .cols span { font-size:.6rem; letter-spacing:.1em; }
+    .set { border-radius:14px; }
+    .set input, input, select { border-radius:12px; }
+    .set input { background:var(--surface-2); border-color:transparent; }
+    .set.done input { background:var(--surface); }
+    .chk { border-radius:13px; transition:background .2s,border-color .2s,transform .2s; }
+    .set.done .chk { background:var(--ok); border-color:var(--ok); }
+    .btn { border-radius:14px; transition:transform .18s,filter .18s,box-shadow .18s; }
+    .btn:not(.ghost):not(:disabled) { box-shadow:0 5px 15px color-mix(in srgb,var(--accent) 20%,transparent); }
+    .session-dock { width:min(620px,calc(100% - 24px)); background:color-mix(in srgb,var(--surface) 94%,transparent); backdrop-filter:blur(18px); border-radius:21px; box-shadow:0 10px 40px rgba(17,40,25,.16); }
+    .session-dock strong { font-size:1.3rem; }
+    .session-dock .continue-btn { border-radius:11px; padding:9px 11px; }
+    .bar { background:color-mix(in srgb,var(--surface) 94%,transparent); }
+    .gl { transition:background .2s,transform .2s; }
+    .nb[aria-selected="true"] .gl { background:var(--soft); }
+    .qpill { border-radius:17px; padding:12px; }
+    .mbox { border-radius:24px; box-shadow:0 24px 80px rgba(0,0,0,.25); }
+    .summary-grid div { border-radius:15px; }
+    @media (hover:hover) { .btn:not(:disabled):hover, .day:hover, .qpill:hover { filter:brightness(.97); transform:translateY(-2px); } }
+    @media (prefers-reduced-motion:no-preference) {
+      .view.enter > :not(.session-dock) { animation:studio-rise .38s cubic-bezier(.2,.7,.2,1) both; animation-delay:calc(var(--i, 0)*35ms); }
+      .view.enter > .session-dock { animation:none; }
+      @keyframes studio-rise { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+      .btn:active:not(:disabled), .day:active, .chk:active { transform:scale(.97); }
+    }
+    @media (max-width:380px) { .hero { padding:20px; } .ex { padding:14px; } .workout-tools .btn { flex:1; } }
+    @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
   </style>
 </head>
 
