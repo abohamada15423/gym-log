@@ -1933,6 +1933,55 @@
         transition: none !important
       }
     }
+    /* Workout workspace */
+    body { padding-bottom: calc(220px + env(safe-area-inset-bottom, 0px)); }
+    .app { max-width: 680px; gap: 18px; }
+    .top { padding: 6px 2px 2px; }
+    .brand { letter-spacing: .02em; }
+    .hero { padding: 24px; border-radius: 24px; gap: 20px; }
+    .hero-title { font-size: clamp(2.7rem, 9vw, 4rem); margin-top: 7px; }
+    .hero-meta { font-size: .82rem; }
+    .prog-wrap { padding: 12px; gap: 9px; }
+    .prog-bar { height: 7px; }
+    .workout-tools { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+    .workout-tools label { flex: 1; min-width: 145px; font-size: .75rem; color: var(--muted); }
+    .workout-tools .btn { min-height: 44px; }
+    .workout-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .workout-heading p { margin: 3px 0 0; color: var(--muted); font-size: .82rem; }
+    .ex { padding: 18px; border-radius: 20px; scroll-margin-top: 18px; }
+    .ex-head { align-items: flex-start; }
+    .ex-name { font-size: 1.35rem; }
+    .ex-toprow { flex-wrap: wrap; }
+    .ico { width: 64px; height: 52px; }
+    .ico canvas { width: 100% !important; height: 100% !important; }
+    .ex-count { font: 500 .7rem var(--f-data); color: var(--muted); }
+    .ex-count.complete { color: var(--ok); }
+    .last-box { border-style: solid; padding: 10px; }
+    .last-title { font-size: .62rem; letter-spacing: .02em; }
+    .set { padding: 5px 3px; }
+    .set input { min-height: 46px; }
+    .chk { min-width: 44px; min-height: 46px; }
+    .set.done { background: var(--ok-soft); }
+    .set.done input { color: var(--muted); }
+    .session-dock { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(66px + env(safe-area-inset-bottom, 0px)); width: min(680px, calc(100% - 24px)); z-index: 25; padding: 12px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 -4px 32px rgba(0,0,0,.12); display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 12px; }
+    .session-dock strong { font-family: var(--f-display); font-size: 1.2rem; }
+    .session-dock small { display: block; color: var(--muted); font-size: .73rem; }
+    .session-dock .btn { min-height: 44px; }
+    .session-dock .continue-btn { grid-column: 1 / -1; text-align: left; background: var(--surface-2); border: 0; padding: 8px 10px; border-radius: 9px; color: var(--accent); font: 600 .8rem var(--f-body); cursor: pointer; }
+    .btn:disabled { opacity: .45; cursor: default; }
+    .rest { bottom: calc(204px + env(safe-area-inset-bottom, 0px)); }
+    .toast { bottom: calc(280px + env(safe-area-inset-bottom, 0px)); max-width: calc(100% - 32px); width: max-content; }
+    button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0; }
+    .summary-grid div { background: var(--surface-2); border-radius: 12px; padding: 12px 6px; text-align: center; }
+    .summary-grid b { display: block; font: 700 1.65rem var(--f-display); }
+    .summary-grid small { color: var(--muted); }
+    @media (max-width: 380px) {
+      .ex { padding: 12px; }
+      .cols, .set { grid-template-columns: 20px minmax(0,1fr) minmax(0,1fr) 64px 44px; gap: 4px; }
+      .ico { width: 48px; height: 39px; }
+      .hero { padding: 18px; }
+    }
   </style>
 </head>
 
@@ -1957,11 +2006,11 @@
     <button class="rbtn" id="rskip">Skip</button>
   </div>
 
-  <div class="toast" id="toast" hidden></div>
+  <div class="toast" id="toast" role="status" hidden></div>
   <canvas id="fx" aria-hidden="true"></canvas>
 
   <!-- Universal Modal -->
-  <div class="modal" id="modal" hidden>
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Workout details" hidden>
     <div class="mbox" id="mbox"></div>
   </div>
 
@@ -2256,6 +2305,7 @@
 
       var state = fresh(), tab = "train", dayId = "push", foodDate = today();
       var animLoops = [];
+      var sessionDates = {};
 
       function $(id) { return document.getElementById(id); }
       function h(tag, attrs, kids) {
@@ -2335,6 +2385,7 @@
               state.baselines = state.baselines || {};
               state.habits = state.habits || {};
               state.customLib = state.customLib || [];
+              sessionDates = state.sessionDates || {};
               state.programId = state.programId || "split4";
               state.notify = !!state.notify; state.keepAwake = state.keepAwake !== false;
             }
@@ -3224,6 +3275,15 @@
         var f = modalOnClose; modalOnClose = null; if (f) f();
       }
       $("modal").onclick = function (e) { if (e.target === $("modal")) closeModal(); };
+      $("modal").onkeydown = function (e) {
+        if (e.key === "Escape") { e.preventDefault(); closeModal(); return; }
+        if (e.key !== "Tab") return;
+        var items = $("mbox").querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]');
+        if (!items.length) return;
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      };
 
       function openBaselineModal(exName) {
         var box = $("mbox"); box.textContent = "";
@@ -3460,6 +3520,7 @@
         var d = DAYS.filter(function (x) { return x.id === dayId; })[0];
         if (!d) { d = DAYS[0]; dayId = d.id; }
         var draft = state.drafts[dk(d.id)] || {};
+        var dateKey = dk(d.id);
         var totalSets = d.ex.reduce(function (a, e) { return a + e[1]; }, 0);
         var pct = 0;
 
@@ -3467,7 +3528,7 @@
         var doneSets = 0, liveVol = 0;
         d.ex.forEach(function (e) {
           var arr = draft[e[0]] || [];
-          arr.forEach(function (s) { if (s && s.done) { doneSets++; liveVol += (num(s.w) || 0) * (num(s.r) || 0); } });
+          arr.slice(0, e[1]).forEach(function (s) { if (s && s.done) { doneSets++; liveVol += (num(s.w) || 0) * (num(s.r) || 0); } });
         });
 
         pct = totalSets ? Math.round(doneSets / totalSets * 100) : 0;
@@ -3476,9 +3537,9 @@
         var hero = h("section", { class: "card hero" }, [
           h("div", { class: "hero-row" }, [
             h("div", {}, [
-              h("div", { class: "eyebrow", text: d.tag + " · " + d.ex.length + " Exercises" }),
+              h("div", { class: "eyebrow", text: progName() + " / " + d.tag }),
               h("div", { class: "hero-title", text: d.name }),
-              h("div", { class: "hero-meta", text: "Target: " + totalSets + " working sets" })
+              h("div", { class: "hero-meta", text: d.ex.length + " exercises · " + totalSets + " working sets" })
             ]),
             h("div", { class: "wk-txt" }, [volB, h("span", { text: "kg volume" })])
           ]),
@@ -3510,7 +3571,7 @@
           if (hab.water > 5) hab.water = 0;
           state.habits[td] = hab; save(); render();
         };
-        root.appendChild(h("div", { class: "qbar" }, [cBtn, wBtn]));
+        var dailyHabits = h("div", { class: "qbar" }, [cBtn, wBtn]);
 
         // Day selector chips
         var nx = nextDay();
@@ -3532,11 +3593,14 @@
         editDayBtn.onclick = function () { openDayEditor(d.id); };
         var sysBtn = h("button", { class: "btn ghost", type: "button", text: "⇄ Change system" });
         sysBtn.onclick = function () { tab = "plan"; window.scrollTo(0, 0); fx.enter = true; render(); };
-        root.appendChild(h("div", { class: "empty", style: "margin-bottom:-6px", text: "System: " + progName() }));
-        root.appendChild(h("div", { class: "grid2" }, [editDayBtn, sysBtn]));
-
-        var dateIn = h("input", { type: "date", value: today() });
-        root.appendChild(h("label", {}, ["Session Date", dateIn]));
+        var dateIn = h("input", { type: "date", value: sessionDates[dateKey] || today() });
+        dateIn.onchange = function () {
+          sessionDates[dateKey] = dateIn.value || today();
+          state.sessionDates = sessionDates; save();
+        };
+        root.appendChild(h("div", { class: "workout-tools" }, [h("label", {}, ["Session date", dateIn]), editDayBtn, sysBtn]));
+        root.appendChild(h("div", { class: "workout-heading" }, [h("div", {}, [h("h2", { text: "Your exercises" }), h("p", { text: "Enter your weight and reps, then check off each set." })])]));
+        var nextExercise = null;
 
         if (!d.ex.length) {
           var addFirst = h("button", { class: "btn", type: "button", text: "＋ Add exercises to this day" });
@@ -3547,13 +3611,16 @@
         }
 
         // Render Each Exercise Card with Quick "Last Weight" Memory
-        d.ex.forEach(function (e) {
+        d.ex.forEach(function (e, exerciseIndex) {
           var name = e[0], setsCount = e[1], repsTarget = e[2], muscle = e[3], restSec = e[4] || 90;
           var hist = getExerciseHistory(name);
           var lastSets = hist.sets;
           var exDraft = (draft[name] = draft[name] || []);
 
-          var card = h("section", { class: "card ex" });
+          var completedCount = exDraft.slice(0, setsCount).filter(function (s) { return s && s.done; }).length;
+          var cardId = "exercise-" + exerciseIndex;
+          if (!nextExercise && completedCount < setsCount) nextExercise = { id: cardId, name: name, set: completedCount + 1 };
+          var card = h("section", { class: "card ex", id: cardId, "aria-label": name, tabindex: "-1" });
           var canvas = h("canvas", {});
           var icoBox = h("div", { class: "ico", title: "Tap for HD Form & Plate Calculator" }, [canvas]);
           drawBiomechanicalExercise(canvas, name, 1);
@@ -3569,6 +3636,7 @@
             for (var i = 0; i < setsCount; i++) {
               var ref = lastSets[i] || lastSets[lastSets.length - 1];
               exDraft[i] = exDraft[i] || { w: "", r: "", done: false };
+              if (exDraft[i].done) continue;
               exDraft[i].w = String(ref[0]);
               exDraft[i].r = String(ref[1]);
             }
@@ -3589,7 +3657,8 @@
                 h("div", { class: "ex-name", text: name, onclick: icoBox.onclick }),
                 fillAllBtn
               ]),
-              sub
+              sub,
+              h("span", { class: "ex-count" + (completedCount === setsCount ? " complete" : ""), text: completedCount === setsCount ? "✓ Exercise complete" : completedCount + " of " + setsCount + " sets complete" })
             ])
           ]);
           card.appendChild(head);
@@ -3613,6 +3682,7 @@
               ch.onclick = function () {
                 var targetIdx = Math.min(idx, setsCount - 1);
                 exDraft[targetIdx] = exDraft[targetIdx] || { w: "", r: "", done: false };
+                if (exDraft[targetIdx].done) { toast("Undo this set before replacing its values"); return; }
                 exDraft[targetIdx].w = String(pair[0]);
                 exDraft[targetIdx].r = String(pair[1]);
                 state.drafts[dk(d.id)] = draft; save(); render();
@@ -3648,8 +3718,8 @@
               var prevPair = lastSets[s] || lastSets[lastSets.length - 1] || null;
 
               var row = h("div", { class: "set" + (curSet.done ? " done" : "") + (fx.pop === name + ":" + s ? " flash" : "") });
-              var wIn = h("input", { type: "text", inputmode: "decimal", value: curSet.w, placeholder: prevPair ? String(prevPair[0]) : "kg" });
-              var rIn = h("input", { type: "text", inputmode: "numeric", value: curSet.r, placeholder: prevPair ? String(prevPair[1]) : repsTarget });
+              var wIn = h("input", { type: "text", inputmode: "decimal", "aria-label": name + ", set " + (s + 1) + ", weight in kilograms", value: curSet.w, placeholder: prevPair ? String(prevPair[0]) : "kg" });
+              var rIn = h("input", { type: "text", inputmode: "numeric", "aria-label": name + ", set " + (s + 1) + ", reps", value: curSet.r, placeholder: prevPair ? String(prevPair[1]) : repsTarget });
               var infoCell = h("div", { class: "sinfo" });
 
               function updateDelta() {
@@ -3658,6 +3728,7 @@
                 if (prevPair) {
                   var pBtn = h("button", { class: "prev-btn", type: "button", title: "Tap to fill " + prevPair[0] + "kg × " + prevPair[1], text: "prev " + prevPair[0] + "×" + prevPair[1] });
                   pBtn.onclick = function () {
+                    if (curSet.done) { toast("Undo this set before replacing its values"); return; }
                     wIn.value = prevPair[0]; rIn.value = prevPair[1];
                     curSet.w = String(prevPair[0]); curSet.r = String(prevPair[1]);
                     state.drafts[dk(d.id)] = draft; save(); updateDelta();
@@ -3684,22 +3755,29 @@
               wIn.oninput = function () { curSet.w = wIn.value; state.drafts[dk(d.id)] = draft; save(); updateDelta(); };
               rIn.oninput = function () { curSet.r = rIn.value; state.drafts[dk(d.id)] = draft; save(); updateDelta(); };
 
-              var chk = h("button", { class: "chk" + (fx.pop === name + ":" + s ? " pop" : ""), type: "button", "aria-label": "Complete set" });
+              var chk = h("button", { class: "chk" + (fx.pop === name + ":" + s ? " pop" : ""), type: "button", "aria-pressed": String(!!curSet.done), "aria-label": (curSet.done ? "Undo " : "Complete ") + name + ", set " + (s + 1) });
               chk.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+              function refreshSet() {
+                var scroll = window.scrollY;
+                render(); window.scrollTo(0, scroll);
+                $(cardId).querySelectorAll(".chk")[s].focus({ preventScroll: true });
+              }
               chk.onclick = function () {
                 if (curSet.done) {
-                  curSet.done = false; state.drafts[dk(d.id)] = draft; save(); render(); return;
+                  curSet.done = false; state.drafts[dk(d.id)] = draft; save(); refreshSet(); return;
                 }
                 if (!wIn.value.trim() && prevPair) wIn.value = prevPair[0];
                 if (!rIn.value.trim() && prevPair) rIn.value = prevPair[1];
-                if (num(wIn.value) === null || num(rIn.value) === null) {
-                  toast("Enter KG and Reps first"); return;
+                var weight = num(wIn.value), reps = num(rIn.value);
+                if (weight === null || weight < 0 || reps === null || reps <= 0 || Math.floor(reps) !== reps) {
+                  toast("Enter a weight of 0 or more and a whole rep count above 0");
+                  (weight === null || weight < 0 ? wIn : rIn).focus(); return;
                 }
                 curSet.w = wIn.value; curSet.r = rIn.value; curSet.done = true;
                 state.drafts[dk(d.id)] = draft; save();
                 fx.pop = name + ":" + s;
                 startRest(restSec, name);
-                render();
+                refreshSet();
               };
 
               row.appendChild(h("span", { class: "n", text: String(s + 1) }));
@@ -3722,14 +3800,15 @@
         });
 
         // Save Session Button
-        var saveBtn = h("button", { class: "btn", text: "Finish & Save Session" });
+        var saveBtn = h("button", { class: "btn", text: "Finish workout", type: "button" });
+        saveBtn.disabled = doneSets === 0;
         saveBtn.onclick = function () {
           var sess = { id: uid(), date: dateIn.value || today(), day: d.id, dayName: d.name, prog: state.programId, sets: {} }, any = false;
           d.ex.forEach(function (e) {
             var name = e[0], arr = draft[name] || [];
-            arr.forEach(function (s) {
+            arr.slice(0, e[1]).forEach(function (s) {
               var w = num(s && s.w), r = num(s && s.r);
-              if (w !== null && r !== null) { (sess.sets[name] = sess.sets[name] || []).push([w, r]); any = true; }
+              if (s && s.done && w !== null && w >= 0 && r !== null && r > 0 && Math.floor(r) === r) { (sess.sets[name] = sess.sets[name] || []).push([w, r]); any = true; }
             });
           });
           if (!any) { toast("Log at least one set first"); return; }
@@ -3740,16 +3819,54 @@
             arr.forEach(function (pr) { if (pr[0] > best) best = pr[0]; });
             if (prev.pr && best > prev.pr[0]) prs.push(e[0] + " " + best + "kg");
           });
-          state.sessions.push(sess);
-          delete state.drafts[dk(d.id)];
-          dayId = nextDay();
-          save();
-          fx.enter = true;
-          render();
-          toast(prs.length ? "New PR 🏆 " + prs.slice(0, 2).join(" · ") : "Session saved! Great work 💪", 2800);
-          requestAnimationFrame(function () { confetti(innerWidth / 2, innerHeight * 0.55, prs.length ? 110 : 60); });
+          var box = $("mbox"); box.textContent = "";
+          var savedSets = 0, savedVolume = 0;
+          Object.keys(sess.sets).forEach(function (name) { sess.sets[name].forEach(function (p) { savedSets++; savedVolume += p[0] * p[1]; }); });
+          box.appendChild(h("div", { class: "eyebrow", text: "WORKOUT SUMMARY" }));
+          box.appendChild(h("h2", { text: d.name + " · " + sess.date }));
+          box.appendChild(h("div", { class: "summary-grid" }, [
+            h("div", {}, [h("b", { text: String(savedSets) }), h("small", { text: "sets" })]),
+            h("div", {}, [h("b", { text: String(Object.keys(sess.sets).length) }), h("small", { text: "exercises" })]),
+            h("div", {}, [h("b", { text: Math.round(savedVolume).toLocaleString() }), h("small", { text: "kg volume" })])
+          ]));
+          box.appendChild(h("p", { text: savedSets < totalSets ? "You've completed " + savedSets + " of " + totalSets + " sets. Only checked sets will be saved." : "Every set complete. Ready to save your workout?" }));
+          var keepGoing = h("button", { class: "btn ghost", text: "Keep training", type: "button" });
+          var confirmSave = h("button", { class: "btn", text: "Save workout", type: "button" });
+          keepGoing.onclick = closeModal;
+          modalOnClose = function () { saveBtn.focus({ preventScroll: true }); };
+          confirmSave.onclick = function () {
+            confirmSave.disabled = true;
+            state.sessions.push(sess);
+            delete state.drafts[dk(d.id)];
+            delete sessionDates[dateKey]; state.sessionDates = sessionDates;
+            if (rest.iv) clearInterval(rest.iv); rest.iv = null; endRestUI();
+            closeModal();
+            dayId = nextDay();
+            save();
+            fx.enter = true;
+            render();
+            toast(prs.length ? "New PR 🏆 " + prs.slice(0, 2).join(" · ") : "Session saved! Great work 💪", 2800);
+            requestAnimationFrame(function () { confetti(innerWidth / 2, innerHeight * 0.55, prs.length ? 110 : 60); });
+            window.scrollTo(0, 0);
+          };
+          box.appendChild(h("div", { class: "grid2" }, [keepGoing, confirmSave]));
+          $("modal").hidden = false;
+          keepGoing.focus();
         };
-        root.appendChild(saveBtn);
+        var dock = h("div", { class: "session-dock", "aria-label": "Workout actions" }, [
+          h("div", {}, [h("strong", { text: doneSets + " / " + totalSets + " sets" }), h("small", { text: doneSets ? "Your progress is saved on this device" : "Ready when you are" })]), saveBtn
+        ]);
+        if (nextExercise) {
+          var continueBtn = h("button", { class: "continue-btn", type: "button", text: "Continue: " + nextExercise.name + " →" });
+          continueBtn.onclick = function () {
+            var target = $(nextExercise.id);
+            target.focus({ preventScroll: true }); target.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
+          };
+          dock.appendChild(continueBtn);
+        }
+        root.appendChild(dock);
+        root.appendChild(h("h2", { text: "Daily habits" }));
+        root.appendChild(dailyHabits);
 
         // Recent Sessions History
         root.appendChild(h("h2", { text: "Recent Sessions" }));
@@ -4383,7 +4500,7 @@
             try {
               var parsed = JSON.parse(ev.target.result);
               if (parsed && Array.isArray(parsed.sessions)) {
-                state = Object.assign(fresh(), parsed); save(); render(); toast("Backup restored!");
+                state = Object.assign(fresh(), parsed); sessionDates = state.sessionDates || {}; save(); render(); toast("Backup restored!");
               }
             } catch (err) { toast("Invalid backup file"); }
           };
