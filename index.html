@@ -2051,6 +2051,39 @@
     }
     @media (max-width:380px) { .hero { padding:20px; } .ex { padding:14px; } .workout-tools .btn { flex:1; } }
     @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
+    /* Focused workout redesign */
+    :root { --accent:#da512e; --accent-d:#9c2f19; --accent-ink:#fff; --soft:#fff0eb; --bg:#f2f1ef; --ink:#202126; --muted:#696a70; --line:#e7e5e2; --surface-2:#f7f6f4; }
+    :root[data-theme="dark"] { --accent:#ff9879; --accent-d:#ae3d26; --accent-ink:#24120d; --soft:#402720; --bg:#111215; --surface:#1b1d22; --surface-2:#24262c; --ink:#f6f4f1; --muted:#b3b2b4; --line:#34363e; }
+    @media (prefers-color-scheme:dark) { :root:not([data-theme="light"]):not([data-theme="dark"]) { --accent:#ff9879; --accent-d:#ae3d26; --accent-ink:#24120d; --soft:#402720; --bg:#111215; --surface:#1b1d22; --surface-2:#24262c; --ink:#f6f4f1; --muted:#b3b2b4; --line:#34363e; } }
+    .hero { background:#242630; position:relative; overflow:hidden; padding:25px; }
+    .hero::before { content:""; position:absolute; width:240px; height:240px; right:-60px; bottom:-140px; background:#ef694a; filter:blur(80px); opacity:.48; pointer-events:none; }
+    .hero::after { display:none; }
+    .hero-row, .hero-footer { position:relative; z-index:1; }
+    .hero-title { font-size:clamp(3rem,11vw,5rem); }
+    .hero-footer { display:flex; align-items:center; gap:14px; border-top:1px solid rgba(255,255,255,.16); padding-top:18px; }
+    .hero-ring { flex:none; width:64px; height:64px; border-radius:50%; display:grid; place-items:center; background:conic-gradient(#ff9271 calc(var(--progress)*1%),rgba(255,255,255,.16) 0); }
+    .hero-ring-inner { width:52px; height:52px; border-radius:50%; background:#292a32; display:grid; place-items:center; font:700 .85rem var(--f-data); }
+    .hero-progress-text { flex:1; font-size:.75rem; color:rgba(255,255,255,.7); }
+    .hero-progress-text b { display:block; color:white; font:700 1.2rem var(--f-display); text-transform:uppercase; }
+    .hero-footer .wk-txt { background:none; border:0; padding:0; min-width:0; }
+    .hero-footer .wk-txt b { font-size:1.5rem; }
+    .section-label { display:flex; justify-content:space-between; align-items:baseline; margin:4px 2px -6px; font:700 .67rem var(--f-data); text-transform:uppercase; letter-spacing:.12em; color:var(--muted); }
+    .workout-settings { border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+    .workout-settings summary { cursor:pointer; padding:12px 15px; font-size:.82rem; font-weight:700; color:var(--muted); }
+    .workout-settings .workout-tools { padding:4px 14px 14px; }
+    .ex { gap:0; padding:0; overflow:hidden; }
+    .ex-head { align-items:center; padding:16px; }
+    .ex-number { color:var(--accent); font:700 .7rem var(--f-data); min-width:19px; }
+    .ex-meta { gap:5px; }
+    .ex-name { font-size:1.35rem; }
+    .exercise-toggle { flex:none; width:40px; height:40px; border:1px solid var(--line); border-radius:12px; background:var(--surface-2); color:var(--ink); font-size:1.2rem; cursor:pointer; transition:transform .2s; }
+    .exercise-toggle[aria-expanded="true"] { transform:rotate(180deg); }
+    .exercise-body { border-top:1px solid var(--line); padding:14px 16px 16px; display:flex; flex-direction:column; gap:12px; }
+    .exercise-body[hidden] { display:none; }
+    .exercise-actions { display:flex; justify-content:flex-end; }
+    .last-box { padding:10px; }
+    .session-dock .continue-btn { color:var(--accent); }
+    @media (max-width:380px) { .hero { padding:19px; } .ex { padding:0; } .ex-head { padding:12px; } .exercise-body { padding:12px; } }
   </style>
 </head>
 
@@ -2375,6 +2408,7 @@
       var state = fresh(), tab = "train", dayId = "push", foodDate = today();
       var animLoops = [];
       var sessionDates = {};
+      var expandedExercise = null;
 
       function $(id) { return document.getElementById(id); }
       function h(tag, attrs, kids) {
@@ -3602,24 +3636,22 @@
 
         pct = totalSets ? Math.round(doneSets / totalSets * 100) : 0;
         var volB = h("b", { text: "0" });
-        var fillEl = h("div", { class: "prog-fill", style: "width:" + (lastPct.day === dayId ? lastPct.pct : 0) + "%" });
         var hero = h("section", { class: "card hero" }, [
           h("div", { class: "hero-row" }, [
             h("div", {}, [
               h("div", { class: "eyebrow", text: progName() + " / " + d.tag }),
               h("div", { class: "hero-title", text: d.name }),
               h("div", { class: "hero-meta", text: d.ex.length + " exercises · " + totalSets + " working sets" })
-            ]),
-            h("div", { class: "wk-txt" }, [volB, h("span", { text: "kg volume" })])
+            ])
           ]),
-          h("div", { class: "prog-wrap" }, [
-            h("div", { class: "prog-top" }, [h("span", { text: "Session Progress" }), h("span", { text: doneSets + " / " + totalSets + " sets (" + pct + "%)" })]),
-            h("div", { class: "prog-bar" }, [fillEl])
+          h("div", { class: "hero-footer" }, [
+            h("div", { class: "hero-ring", style: "--progress:" + pct, role: "img", "aria-label": pct + "% complete" }, [h("div", { class: "hero-ring-inner", text: pct + "%" })]),
+            h("div", { class: "hero-progress-text" }, [h("b", { text: doneSets + " / " + totalSets + " sets" }), "Session progress"]),
+            h("div", { class: "wk-txt" }, [volB, h("span", { text: "kg volume" })])
           ])
         ]);
         root.appendChild(hero);
         countUp(volB, lastPct.day === dayId ? lastPct.vol : 0, liveVol);
-        requestAnimationFrame(function () { requestAnimationFrame(function () { fillEl.style.width = pct + "%"; }); });
         lastPct = { day: dayId, pct: pct, vol: liveVol };
 
         // Daily Creatine + Water Quick Strip
@@ -3652,9 +3684,10 @@
             x.id === nx ? h("span", { class: "nx", title: "Up next" }) : null,
             hasDr ? h("span", { class: "dr", title: "Saved draft" }) : null
           ]);
-          b.onclick = function () { dayId = x.id; fx.enter = true; render(); };
+          b.onclick = function () { dayId = x.id; expandedExercise = null; fx.enter = true; render(); };
           return b;
         }));
+        root.appendChild(h("div", { class: "section-label" }, [h("span", { text: "Your training split" }), h("span", { text: "Swipe to switch →" })]));
         root.appendChild(chips);
 
         // Program name + customize / change system
@@ -3667,9 +3700,10 @@
           sessionDates[dateKey] = dateIn.value || today();
           state.sessionDates = sessionDates; save();
         };
-        root.appendChild(h("div", { class: "workout-tools" }, [h("label", {}, ["Session date", dateIn]), editDayBtn, sysBtn]));
+        root.appendChild(h("details", { class: "workout-settings" }, [h("summary", { text: "Workout settings · date & program" }), h("div", { class: "workout-tools" }, [h("label", {}, ["Session date", dateIn]), editDayBtn, sysBtn])]));
         root.appendChild(h("div", { class: "workout-heading" }, [h("div", {}, [h("h2", { text: "Your exercises" }), h("p", { text: "Enter your weight and reps, then check off each set." })])]));
         var nextExercise = null;
+        var firstUnfinished = d.ex.findIndex(function (exercise) { return (draft[exercise[0]] || []).slice(0, exercise[1]).filter(function (s) { return s && s.done; }).length < exercise[1]; });
 
         if (!d.ex.length) {
           var addFirst = h("button", { class: "btn", type: "button", text: "＋ Add exercises to this day" });
@@ -3690,6 +3724,15 @@
           var cardId = "exercise-" + exerciseIndex;
           if (!nextExercise && completedCount < setsCount) nextExercise = { id: cardId, name: name, set: completedCount + 1 };
           var card = h("section", { class: "card ex", id: cardId, "aria-label": name, tabindex: "-1" });
+          var isExpanded = expandedExercise === null ? exerciseIndex === firstUnfinished : expandedExercise === name;
+          var exerciseBody = h("div", { class: "exercise-body", id: cardId + "-body" });
+          exerciseBody.hidden = !isExpanded;
+          var expandBtn = h("button", { class: "exercise-toggle", type: "button", "aria-expanded": String(isExpanded), "aria-controls": cardId + "-body", "aria-label": (isExpanded ? "Collapse " : "Expand ") + name, text: "⌄" });
+          expandBtn.onclick = function () {
+            expandedExercise = isExpanded ? "" : name;
+            var scroll = window.scrollY; render(); window.scrollTo(0, scroll);
+            $(cardId).querySelector(".exercise-toggle").focus({ preventScroll: true });
+          };
           var canvas = h("canvas", {});
           var icoBox = h("div", { class: "ico", title: "Tap for HD Form & Plate Calculator" }, [canvas]);
           drawBiomechanicalExercise(canvas, name, 1);
@@ -3720,17 +3763,18 @@
           ]);
 
           var head = h("div", { class: "ex-head" }, [
+            h("span", { class: "ex-number", text: String(exerciseIndex + 1).padStart(2, "0") }),
             icoBox,
             h("div", { class: "ex-meta" }, [
               h("div", { class: "ex-toprow" }, [
-                h("div", { class: "ex-name", text: name, onclick: icoBox.onclick }),
-                fillAllBtn
+                h("div", { class: "ex-name", text: name, onclick: icoBox.onclick })
               ]),
               sub,
               h("span", { class: "ex-count" + (completedCount === setsCount ? " complete" : ""), text: completedCount === setsCount ? "✓ Exercise complete" : completedCount + " of " + setsCount + " sets complete" })
-            ])
+            ]), expandBtn
           ]);
           card.appendChild(head);
+          exerciseBody.appendChild(h("div", { class: "exercise-actions" }, [fillAllBtn]));
 
           /* --- QUICK LAST LIFTED MEMORY STRIP --- */
           var lastBox = h("div", { class: "last-box" });
@@ -3768,7 +3812,7 @@
               setNow
             ]));
           }
-          card.appendChild(lastBox);
+          exerciseBody.appendChild(lastBox);
 
           /* --- SETS TABLE --- */
           var grid = h("div", { class: "sets" }, [
@@ -3864,7 +3908,8 @@
             card.classList.add("celebrate");
             (function (c) { requestAnimationFrame(function () { var r = c.getBoundingClientRect(); confetti(r.left + r.width - 48, r.top + 36, 30); }); })(card);
           }
-          card.appendChild(grid);
+          exerciseBody.appendChild(grid);
+          card.appendChild(exerciseBody);
           root.appendChild(card);
         });
 
@@ -3928,6 +3973,8 @@
         if (nextExercise) {
           var continueBtn = h("button", { class: "continue-btn", type: "button", text: "Continue: " + nextExercise.name + " →" });
           continueBtn.onclick = function () {
+            expandedExercise = nextExercise.name;
+            render();
             var target = $(nextExercise.id);
             target.focus({ preventScroll: true }); target.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
           };

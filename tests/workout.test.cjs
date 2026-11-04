@@ -111,3 +111,16 @@ test('workout summary supports keyboard cancellation and returns focus', t => {
   assert.equal(a.doc.activeElement.textContent, 'Finish workout');
   assert.equal(a.state().sessions.length, 0);
 });
+
+test('exercise cards can be expanded and the continue action opens the next exercise', t => {
+  const a = app(t);
+  const cards = a.doc.querySelectorAll('.ex');
+  assert.equal(cards[0].querySelector('.exercise-toggle').getAttribute('aria-expanded'), 'true');
+  assert.equal(cards[1].querySelector('.exercise-body').hidden, true);
+  cards[1].querySelector('.exercise-toggle').click();
+  assert.equal(a.doc.querySelectorAll('.ex')[1].querySelector('.exercise-body').hidden, false);
+  assert.equal(a.doc.querySelectorAll('.ex')[0].querySelector('.exercise-body').hidden, true);
+  a.w.HTMLElement.prototype.scrollIntoView = () => {};
+  a.doc.querySelector('.continue-btn').click();
+  assert.equal(a.doc.querySelectorAll('.ex')[0].querySelector('.exercise-body').hidden, false);
+});
