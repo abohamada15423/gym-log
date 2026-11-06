@@ -2412,10 +2412,11 @@
       ];
 
       var BASE = { date: "2026-10-05", kg: 90.6, waist: null, fat: 25.2, note: "InBody" };
-      var GOAL_KG = 81.0, KCAL = 2550, PRO = 180;
+      var GOAL_DEFAULTS = { kg: 81.0, kcal: 2550, protein: 180 };
+      function goals() { return Object.assign({}, GOAL_DEFAULTS, state.goals || {}); }
 
       function fresh() {
-        return { v: 2, sessions: [], body: [Object.assign({}, BASE)], food: [], drafts: {}, baselines: {}, habits: {}, theme: null, programId: "split4", custom: null, customLib: [], notify: false, keepAwake: true };
+        return { v: 2, sessions: [], body: [Object.assign({}, BASE)], food: [], drafts: {}, baselines: {}, habits: {}, theme: null, programId: "split4", custom: null, customLib: [], notify: false, keepAwake: true, goals: {} };
       }
 
       var state = fresh(), tab = "train", dayId = "push", foodDate = today();
@@ -2525,6 +2526,7 @@
         sessionDates = state.sessionDates || {};
         state.programId = state.programId || "split4";
         state.notify = !!state.notify; state.keepAwake = state.keepAwake !== false;
+        if (!state.goals || typeof state.goals !== "object") state.goals = {};
       }
       function applyLoaded() {
         if (state.theme) document.documentElement.setAttribute("data-theme", state.theme);
@@ -4472,7 +4474,9 @@
         var withKg = sorted.filter(function (b) { return b.kg != null; });
         var cur = withKg[withKg.length - 1], first = withKg[0];
         var diff = cur && first ? Math.round((cur.kg - first.kg) * 10) / 10 : 0;
-        var toGoal = cur ? Math.round((cur.kg - GOAL_KG) * 10) / 10 : 0;
+        var G = goals(), cutting = !first || G.kg <= first.kg;
+        var toGoal = cur ? Math.round(Math.abs(cur.kg - G.kg) * 10) / 10 : 0;
+        var reached = cur && (cutting ? cur.kg <= G.kg : cur.kg >= G.kg);
 
         function tile(k, n, u) {
           var big = h("div", { class: "n", text: n }); if (u) big.appendChild(h("small", { text: u }));
@@ -4480,9 +4484,9 @@
         }
         root.appendChild(h("div", { class: "grid2" }, [
           tile("Current Weight", cur ? String(cur.kg) : "–", "kg"),
-          tile("Target Goal", String(GOAL_KG), "kg"),
+          tile("Target Goal", String(G.kg), "kg"),
           tile("Total Change", (diff > 0 ? "+" : "") + diff, "kg"),
-          tile("To Goal", toGoal > 0 ? toGoal + " left" : "Reached!", "kg")
+          tile("To Goal", !cur ? "–" : reached ? "Reached!" : toGoal + " " + (cutting ? "to lose" : "to gain"), reached || !cur ? "" : "kg")
         ]));
 
         root.appendChild(h("h2", { text: "Log Check-in" }));
@@ -4538,8 +4542,8 @@
 
         root.appendChild(h("label", {}, ["Date", dateIn]));
         root.appendChild(h("div", { class: "rings" }, [
-          ring("Calories", kc, KCAL, "kcal", ""),
-          ring("Protein", pr, PRO, "g", "gold")
+          ring("Calories", kc, goals().kcal, "kcal", ""),
+          ring("Protein", pr, goals().protein, "g", "gold")
         ]));
 
         root.appendChild(h("h2", { text: "Quick Add Meals & High-Protein Staples" }));
@@ -4592,11 +4596,24 @@
           return h("div", { class: "stat" }, [h("div", { class: "k", text: k }), big]);
         }
         renderPrograms(root);
-        root.appendChild(h("div", { class: "grid2" }, [
-          tile("Calories", "2500–2600", "kcal"),
-          tile("Protein", "160–180", "g"),
-          tile("Goal Weight", "81.0", "kg"),
-          tile("InBody Start", "90.6", "kg")
+        var G = goals();
+        var startEntry = state.body.filter(function (b) { return b.kg != null; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0];
+        root.appendChild(h("h2", { text: "Your Goals" }));
+        function goalField(label, key, unit, min, max) {
+          var inp = h("input", { type: "text", inputmode: "decimal", value: String(G[key]), "aria-label": label + " (" + unit + ")" });
+          inp.onchange = function () {
+            var v = num(inp.value);
+            if (v === null || v < min || v > max) { toast(label + " must be " + min + "–" + max + " " + unit); inp.value = String(goals()[key]); return; }
+            v = key === "kg" ? Math.round(v * 10) / 10 : Math.round(v);
+            state.goals[key] = v; inp.value = String(v); save(); toast(label + " set to " + v + " " + unit);
+          };
+          return h("label", {}, [label + " (" + unit + ")", inp]);
+        }
+        root.appendChild(h("div", { class: "card", style: "display:flex;flex-direction:column;gap:10px" }, [
+          h("div", { class: "grid2" }, [goalField("Daily calories", "kcal", "kcal", 800, 8000), goalField("Daily protein", "protein", "g", 20, 500)]),
+          h("div", { class: "grid2" }, [goalField("Goal weight", "kg", "kg", 30, 300),
+            tile("Starting weight", startEntry ? String(startEntry.kg) : "–", startEntry ? "kg" : "")]),
+          h("div", { class: "note", text: "Changes save straight away and update the Body and Meals tabs." })
         ]));
 
         root.appendChild(h("h2", { text: "Alerts & Screen" }));
@@ -4666,9 +4683,9 @@
         [
           "Stop each set 1–2 reps before failure.",
           "When you hit the top of the rep range on every set, add 2.5 kg next session.",
-          "Aim to lose 0.3–0.5 kg per week toward your 81.0 kg goal.",
-          "InBody Baseline (5 Oct 2026): 90.6 kg weight · 37.3 kg muscle · 25.2% body fat."
-        ].forEach(function (t) { ul.appendChild(h("li", { text: t })); });
+          (!startEntry || G.kg <= startEntry.kg ? "Aim to lose 0.3–0.5 kg per week toward your " : "Aim to gain 0.2–0.4 kg per week toward your ") + G.kg + " kg goal.",
+          startEntry ? "Starting point (" + startEntry.date + "): " + startEntry.kg + " kg" + (startEntry.fat != null ? " · " + startEntry.fat + "% body fat" : "") + "." : null
+        ].forEach(function (t) { if (t) ul.appendChild(h("li", { text: t })); });
         root.appendChild(h("div", { class: "card" }, [ul]));
       }
 

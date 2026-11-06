@@ -170,3 +170,19 @@ test('importing a backup asks first, then restores and normalises it', async t =
   assert.deepEqual(a.state().sessions.map(s => s.id), ['y', 'z']);
   assert.deepEqual(a.state().drafts, {});
 });
+
+test('goals are editable on the Plan tab and drive the Meals and Body tabs', t => {
+  const a = app(t);
+  a.doc.getElementById('t-plan').click();
+  const field = label => a.doc.querySelector(`input[aria-label^="${label}"]`);
+  const set = (label, v) => { const i = field(label); i.value = v; i.dispatchEvent(new a.w.Event('change')); };
+  set('Daily protein', '9999');
+  assert.equal(field('Daily protein').value, '180');
+  set('Daily protein', '150');
+  set('Goal weight', '95');
+  assert.deepEqual(a.state().goals, { protein: 150, kg: 95 });
+  a.doc.getElementById('t-meals').click();
+  assert.match(a.doc.querySelector('.rings').textContent, /150 left of 150/);
+  a.doc.getElementById('t-body').click();
+  assert.match(a.doc.body.textContent, /4\.4 to gain/);
+});
