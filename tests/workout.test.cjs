@@ -483,3 +483,23 @@ test('focus mode ends on a summary that hands over to Finish workout', t => {
   assert.equal(a.doc.getElementById('modal').hidden, false);
   assert.match(a.doc.getElementById('mbox').textContent, /WORKOUT SUMMARY/);
 });
+
+test('exercise sheet and focus mode show real start/end photos; your own exercises keep the drawn figure', t => {
+  const a = app(t);
+  a.doc.querySelector('.ex-name').click();
+  const imgs = [...a.doc.querySelectorAll('#mbox .demo img')];
+  assert.deepEqual(imgs.map(i => i.getAttribute('src')), ['img/ex/Barbell_Bench_Press_-_Medium_Grip-0.webp', 'img/ex/Barbell_Bench_Press_-_Medium_Grip-1.webp']);
+  assert.equal(imgs[0].getAttribute('alt'), 'Bench press, start position');
+  const demo = a.doc.querySelector('#mbox .demo');
+  demo.click();
+  assert.equal(demo.getAttribute('aria-pressed'), 'true');
+  a.click('Close');
+  // every built-in exercise has its photos on disk
+  const fs = require('node:fs');
+  const missing = Array.from(Object.values(a.w.eval('EX_PHOTOS'))).flatMap(f => [0, 1].map(i => `img/ex/${f}-${i}.webp`)).filter(p => !fs.existsSync(p));
+  assert.deepEqual(missing, []);
+  const lib = Array.from(a.w.eval('LIB'), l => l[0]);
+  assert.deepEqual(lib.filter(n => !a.w.eval('EX_PHOTOS')[n]), []);
+  // an exercise without photos falls back to the canvas figure
+  assert.ok(a.w.eval('exerciseDemo("My odd exercise")').classList.contains('demo-drawn'));
+});
