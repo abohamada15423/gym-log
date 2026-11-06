@@ -7,18 +7,7 @@ function renderPlan(root) {
     var big = h("div", { class: "n", text: n }); if (u) big.appendChild(h("small", { text: u }));
     return h("div", { class: "stat" }, [h("div", { class: "k", text: k }), big]);
   }
-  // Each option is written in its own language so it can always be found.
-  var langRow = h("div", { class: "lang-switch", role: "group", "aria-label": "Language / اللغة" });
-  [["en", "English"], ["ar", "العربية"]].forEach(function (L) {
-    var b = h("button", { class: "btn ghost", type: "button", lang: L[0], "aria-pressed": String((state.lang || "en") === L[0]) });
-    b.appendChild(document.createTextNode(L[1]));
-    b.onclick = function () {
-      if ((state.lang || "en") === L[0]) return;
-      state.lang = L[0]; save(); applyLang(); window.scrollTo(0, 0); render();
-    };
-    langRow.appendChild(b);
-  });
-  root.appendChild(langRow);
+
   renderPrograms(root);
   var G = goals();
   var startEntry = state.body.filter(function (b) { return b.kg != null; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0];
@@ -81,6 +70,20 @@ function renderPlan(root) {
     hadd
   ]));
   root.appendChild(hcard);
+
+  // Each option is written in its own language so it can always be found.
+  var langRow = h("div", { class: "lang-switch", role: "group", "aria-label": "Language / اللغة" });
+  [["en", "English"], ["ar", "العربية"]].forEach(function (L) {
+    var b = h("button", { class: "btn ghost", type: "button", lang: L[0], "aria-pressed": String((state.lang || "en") === L[0]) });
+    b.appendChild(document.createTextNode(L[1]));
+    b.onclick = function () {
+      if ((state.lang || "en") === L[0]) return;
+      state.lang = L[0]; save(); applyLang(); window.scrollTo(0, 0); render();
+    };
+    langRow.appendChild(b);
+  });
+  root.appendChild(h("h2", { text: "Language" }));
+  root.appendChild(langRow);
 
   root.appendChild(h("h2", { text: "Alerts & Screen" }));
   function toggleRow(title, sub, on) {

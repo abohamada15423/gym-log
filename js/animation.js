@@ -23,17 +23,26 @@ function ik(ax, ay, bx, by, l1, l2, dir) {
   var a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), hh = Math.sqrt(Math.max(0, l1 * l1 - a * a));
   return [ax + ux * a - uy * hh * dir, ay + uy * a + ux * hh * dir, ax + ux * d, ay + uy * d];
 }
+// Matches the app theme: a neutral figure, the far-side limbs a step lighter, equipment in the accent colour.
 function pal(dark) {
   return dark ?
-    { body: "#6E8CFF", far: "#3C55B8", out: "#050A16", skin: "#F1C7A4", gold: "#FFD23F", goldD: "#A8841A", gray: "#8C9AB3", grayD: "#55627A", floor: "rgba(234,240,250,.28)" } :
-    { body: "#2F5BFF", far: "#1B3BB5", out: "#0B1430", skin: "#F2C6A0", gold: "#F5A400", goldD: "#A86F00", gray: "#9AA6BA", grayD: "#5E6B80", floor: "rgba(13,22,38,.25)" };
+    { body: "#F3EFE9", far: "#8D8F97", out: "#1B1D22", skin: "#E7B48F", gold: "#FF9879", goldD: "#C8573B", gray: "#5A5D66", grayD: "#3A3C43", floor: "rgba(246,244,241,.16)", glow: "255,152,121" } :
+    { body: "#2A2D35", far: "#A3A5AC", out: "#2A2D35", skin: "#E3A67E", gold: "#DA512E", goldD: "#9C2F19", gray: "#C9C5BF", grayD: "#99958F", floor: "rgba(32,33,38,.14)", glow: "218,81,46" };
+}
+// Lift, short pause, lower, short pause: reads more like a real rep than an even sway. Returns 0..1.
+var REP_MS = 3400;
+function tempo(t) {
+  var c = (t % REP_MS) / REP_MS;
+  if (c < 0.38) return ease(c / 0.38);
+  if (c < 0.5) return 1;
+  if (c < 0.9) return 1 - ease((c - 0.5) / 0.4);
+  return 0;
 }
 function poly(pts, w, col) {
   var C = AN.C; C.lineCap = "round"; C.lineJoin = "round";
   C.beginPath(); C.moveTo(pts[0][0], pts[0][1]);
   for (var i = 1; i < pts.length; i++)C.lineTo(pts[i][0], pts[i][1]);
-  C.lineWidth = w + 1.5; C.strokeStyle = AN.P.out; C.stroke();
-  C.lineWidth = w; C.strokeStyle = col; C.stroke();
+  C.lineWidth = w + 0.4; C.strokeStyle = col; C.stroke();
 }
 function line(x1, y1, x2, y2, w, col) {
   var C = AN.C; C.lineCap = "round"; C.beginPath(); C.moveTo(x1, y1); C.lineTo(x2, y2);
@@ -44,7 +53,8 @@ function plate(x, y, r) { var P = AN.P; dot(x, y, r + .9, P.goldD); dot(x, y, r,
 function dumb(x, y) { var P = AN.P; dot(x, y, 3.7, P.goldD); dot(x, y, 2.9, P.gold); }
 function glow(x, y, r, p) {
   var C = AN.C, g = C.createRadialGradient(x, y, 0, x, y, r), al = 0.28 + 0.5 * p;
-  g.addColorStop(0, "rgba(255,96,40," + al + ")"); g.addColorStop(1, "rgba(255,96,40,0)");
+  var gc = AN.P.glow || "255,96,40";
+  g.addColorStop(0, "rgba(" + gc + "," + al + ")"); g.addColorStop(1, "rgba(" + gc + ",0)");
   C.fillStyle = g; C.beginPath(); C.arc(x, y, r, 0, 6.2832); C.fill();
 }
 function floor() { var P = AN.P; line(5, FL + 1.2, 77, FL + 1.2, 1.3, P.floor); }
@@ -76,8 +86,8 @@ function fig(o) {
   dot(aa.e[0], aa.e[1], 1.9, P.skin);
   var dx = S[0] - H[0], dy = S[1] - H[1], dl = hyp(dx, dy) || 1;
   var hc = o.head || [S[0] + dx / dl * 5.7 + 0.5 * f, S[1] + dy / dl * 5.7];
-  dot(hc[0], hc[1], 4.4, P.out); dot(hc[0], hc[1], 3.6, P.skin);
-  dot(hc[0] + 1.3 * f, hc[1] - 0.6, 0.7, P.out);
+  dot(hc[0], hc[1], 4, P.skin);
+  dot(hc[0] + 1.4 * f, hc[1] - 0.5, 0.6, P.out);
   return { hn: aa.e, hc: hc };
 }
 // front-view figure
@@ -94,7 +104,7 @@ function ffig(o) {
     poly([sh, o.el[i], o.hd[i]], 2.8, P.body);
     dot(o.hd[i][0], o.hd[i][1], 1.9, P.skin);
   }
-  dot(hc[0], hc[1], 4.4, P.out); dot(hc[0], hc[1], 3.6, P.skin);
+  dot(hc[0], hc[1], 4, P.skin);
   return hc;
 }
 
@@ -676,7 +686,7 @@ function drawBiomechanicalExercise(canvas, exName, scale) {
     if (gen !== animGen || !canvas.isConnected) return;
     var dark = document.documentElement.getAttribute("data-theme") === "dark" ||
       (!document.documentElement.getAttribute("data-theme") && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    var p = ease(0.5 - 0.5 * Math.cos(t / 560));
+    var p = tempo(t);
     if (reduce) p = 0.5;
     ctx.setTransform(W / 82, 0, 0, H / 66, 0, 0);
     renderPose(ctx, spec, p, t, dark);
@@ -709,7 +719,7 @@ function thumbLoop(t) {
   if (!THUMBS.length) return;
   var de = document.documentElement.getAttribute("data-theme");
   var dark = de === "dark" || (!de && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  var p = ease(0.5 - 0.5 * Math.cos(t / 560));
+  var p = tempo(t);
   THUMBS.forEach(function (r) {
     if (!r.vis) return;
     r.ctx.setTransform(r.sc, 0, 0, r.sc, 0, 0);

@@ -31,10 +31,10 @@ function lineChart(points, opts) {
   var path = points.map(function (p, i) { return (i ? "L" : "M") + f(X(p.d)) + " " + f(Y(p.y)); }).join(" ");
   if (points.length > 1) {
     out.push('<path class="c-area" d="' + path + ' L' + f(X(points[points.length - 1].d)) + ' ' + (H - B) + ' L' + f(X(points[0].d)) + ' ' + (H - B) + ' Z"/>');
-    out.push('<path class="c-line" d="' + path + '"/>');
+    out.push('<path class="c-line" pathLength="1" d="' + path + '"/>');
   }
   if (points.length <= 40) points.forEach(function (p, i) {
-    out.push('<circle class="' + (i === points.length - 1 ? "c-last" : "c-dot") + '" cx="' + f(X(p.d)) + '" cy="' + f(Y(p.y)) + '" r="' + (i === points.length - 1 ? 4 : 3) + '"/>');
+    out.push('<circle style="--d:' + i + '" class="' + (i === points.length - 1 ? "c-last" : "c-dot") + '" cx="' + f(X(p.d)) + '" cy="' + f(Y(p.y)) + '" r="' + (i === points.length - 1 ? 4 : 3) + '"/>');
   });
   out.push('<text x="' + L + '" y="' + (H - 5) + '">' + mbShort(points[0].d) + '</text>');
   if (points.length > 1) out.push('<text x="' + (W - R) + '" y="' + (H - 5) + '" text-anchor="end">' + mbShort(points[points.length - 1].d) + '</text>');

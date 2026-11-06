@@ -53,9 +53,10 @@ function startRest(sec, name) {
 function tickRest() {
   var left = Math.max(0, Math.ceil((rest.end - Date.now()) / 1000));
   $("rtime").textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+  $("rest").classList.toggle("soon", left > 0 && left <= 5);
   $("rest").style.setProperty("--p", String(Math.min(100, Math.max(0, (1 - (rest.end - Date.now()) / (rest.total * 1000)) * 100)).toFixed(1)));
   if (left <= 0) {
-    clearInterval(rest.iv); rest.iv = null; $("rlabel").textContent = "GO!"; $("rest").classList.add("go");
+    clearInterval(rest.iv); rest.iv = null; $("rlabel").textContent = "GO!"; $("rest").classList.remove("soon"); $("rest").classList.add("go");
     beep(); try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) { }
     if (document.hidden && notifyOK()) showNotif("Rest over — GO! 💪", rest.name ? ("Next set: " + rest.name) : "Time for your next set");
     freeScreen();

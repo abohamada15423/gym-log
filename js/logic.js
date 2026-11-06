@@ -25,6 +25,7 @@ function adopt(s) {
 function applyLoaded() {
   if (state.theme) document.documentElement.setAttribute("data-theme", state.theme);
   else document.documentElement.removeAttribute("data-theme");
+  themeIcon();
   applyProgram();
   dayId = nextDay();
   expandedExercise = null;
@@ -74,11 +75,23 @@ function save() {
 }
 
 /* ---------- THEME ---------- */
+function isDark() {
+  var de = document.documentElement.getAttribute("data-theme");
+  return de === "dark" || (!de && !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches));
+}
+// Moon in light mode, sun in dark mode: the icon shows what a tap switches to.
+function themeIcon() {
+  var b = $("theme-btn"), dark = isDark();
+  b.innerHTML = dark
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg>';
+  b.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+  b.removeAttribute("title");
+}
 $("theme-btn").onclick = function () {
-  var cur = document.documentElement.getAttribute("data-theme");
-  var next = cur === "dark" ? "light" : "dark";
+  var next = isDark() ? "light" : "dark";
   document.documentElement.setAttribute("data-theme", next);
-  state.theme = next; save();
+  state.theme = next; save(); themeIcon();
 };
 
 /* ---------- LAST LIFTED MEMORY ENGINE ---------- */

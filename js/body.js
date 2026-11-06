@@ -65,7 +65,7 @@ function renderCalendar() {
   for (var dd = 1; dd <= daysIn; dd++) {
     var ymd = fmt(new Date(y, m, dd)), on = !!trained[ymd];
     if (on) inMonth++;
-    grid.appendChild(h("div", { class: "c" + (on ? " on" : "") + (ymd === today() ? " today" : ""), role: "gridcell", "aria-label": mbDay(ymd) + (on ? ", trained" : ""), text: String(dd) }));
+    grid.appendChild(h("div", { class: "c" + (on ? " on" : "") + (ymd === today() ? " today" : ""), style: "--d:" + dd, role: "gridcell", "aria-label": mbDay(ymd) + (on ? ", trained" : ""), text: String(dd) }));
   }
   var prev = h("button", { class: "icon-btn mnav", type: "button", "aria-label": "Previous month", text: "‹" });
   var next = h("button", { class: "icon-btn mnav", type: "button", "aria-label": "Next month", text: "›" });
@@ -111,7 +111,7 @@ function openRecordsModal() {
   var prs = personalRecords();
   box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Personal Records" }), close]));
   var list = h("div", {});
-  prs.forEach(function (p) { list.appendChild(prRow(p)); });
+  prs.forEach(function (p, i) { var r = prRow(p); r.style.setProperty("--d", i); list.appendChild(r); });
   box.appendChild(list);
   $("modal").hidden = false; close.focus();
 }
@@ -119,7 +119,7 @@ function renderRecordsCard() {
   var prs = personalRecords();
   var card = h("div", { class: "card" });
   if (!prs.length) { card.appendChild(h("div", { class: "empty", text: "Your best lifts appear here after your first workout." })); return card; }
-  prs.slice(0, 5).forEach(function (p) { card.appendChild(prRow(p)); });
+  prs.slice(0, 5).forEach(function (p, i) { var r = prRow(p); r.style.setProperty("--d", i); card.appendChild(r); });
   if (prs.length > 5) {
     var all = h("button", { class: "btn ghost", type: "button", text: "View all " + prs.length + " records" });
     all.onclick = openRecordsModal;

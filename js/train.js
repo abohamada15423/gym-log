@@ -180,7 +180,7 @@ function renderTrain(root) {
       var editBaseBtn = h("button", { class: "set-base-btn", style: "background:transparent;padding:0", text: "Edit Reference ✎" });
       editBaseBtn.onclick = function () { openBaselineModal(name); };
       lastBox.appendChild(h("div", { class: "last-hdr" }, [
-        h("div", { class: "last-title", html: "⚡ LAST LIFTED (<b>" + hist.date + "</b>) — Tap any set to copy:" }),
+        h("div", { class: "last-title" }, [hist.date === "Baseline" ? "Your reference" : "Last time · " + mbDay(hist.date), h("small", { text: "Tap a set to copy it" })]),
         editBaseBtn
       ]));
       var chipWrap = h("div", { class: "last-chips" });

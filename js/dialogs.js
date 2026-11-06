@@ -7,6 +7,10 @@ function closeModal() {
   var f = modalOnClose; modalOnClose = null; if (f) f();
 }
 $("modal").onclick = function (e) { if (e.target === $("modal")) closeModal(); };
+// Escape closes any open dialog, even when focus is still on the page behind it.
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape" && !$("modal").hidden) { e.preventDefault(); closeModal(); }
+});
 $("modal").onkeydown = function (e) {
   if (e.key === "Escape") { e.preventDefault(); closeModal(); return; }
   if (e.key !== "Tab") return;
@@ -63,6 +67,7 @@ function openPlateModal(exName, weight, reps) {
     box.appendChild(h("div", { class: "empty", text: tp.length ? "Log this exercise in one more workout to see your progress chart." : "Your progress chart appears here after you log this exercise in two workouts." }));
   }
   $("modal").hidden = false;
+  box.querySelector(".mhead .btn").focus({ preventScroll: true });
 }
 
 /* ---------- BACKUP ---------- */
@@ -125,7 +130,7 @@ function openWarmupModal(exName, work) {
     sets.concat([{ w: w, r: null, work: true }]).forEach(function (st, i) {
       var pl = barbell ? platesFor(st.w, 20) : null;
       var side = st.note || (pl ? (pl.length ? pl.join(" + ") + " a side" : "Bar only") : "");
-      list.appendChild(h("div", { class: "warm-row" + (st.work ? " work" : "") }, [
+      list.appendChild(h("div", { class: "warm-row" + (st.work ? " work" : ""), style: "--d:" + i }, [
         h("span", { text: st.work ? "▶" : String(i + 1) }),
         h("b", { text: mbFmt(st.w) + " kg" + (st.r ? " × " + st.r : " · working sets") }),
         h("small", { text: side })
