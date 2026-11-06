@@ -326,3 +326,26 @@ test('warm-up ramps toward the working weight with plates for barbell lifts', t 
   w.value = '30'; w.dispatchEvent(new a.w.Event('input'));
   assert.ok(a.doc.querySelectorAll('#mbox .warm-row').length <= 3);
 });
+
+test('body tab shows the week against last week, a training calendar with streak, and personal records', t => {
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Saturday-start weeks: train in this week, last week and the week before
+  const thisSat = (() => { const d = new Date(); d.setDate(d.getDate() - (d.getDay() + 1) % 7); return d; })();
+  const sat = k => { const d = new Date(thisSat); d.setDate(d.getDate() - 7 * k); return ymd(d); };
+  const sessions = [
+    { id: '1', day: 'old', date: sat(2), sets: { Squat: [[100, 5]] } },
+    { id: '2', day: 'old', date: sat(1), sets: { Squat: [[105, 5]], 'Pull-ups': [[0, 10]] } },
+    { id: '3', day: 'old', date: sat(0), sets: { Squat: [[105, 6], [100, 5]], 'Pull-ups': [[0, 12]] } }
+  ];
+  const b = app(t, { sessions });
+  b.doc.getElementById('t-body').click();
+  const wk = b.doc.querySelector('.wk').textContent;
+  assert.match(wk, /Sets3▲ 1/);
+  assert.match(b.doc.querySelector('.streak').textContent, /🔥 3week streak/);
+  assert.ok(b.doc.querySelector('.cal .c.today'));
+  const prs = [...b.doc.querySelectorAll('.pr-row')].map(r => r.textContent);
+  assert.ok(prs.some(r => /Squat.*105 kg × 6/.test(r)));
+  assert.ok(prs.some(r => /Pull-ups.*12 reps/.test(r)));
+  b.doc.querySelector('[aria-label="Previous month"]').click();
+  assert.equal(b.doc.querySelector('[aria-label="Next month"]').disabled, false);
+});

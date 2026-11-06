@@ -1165,6 +1165,31 @@
     .warm-row.work { border-color: var(--accent); background: var(--soft) }
     .hist-note { font-size: .85rem; color: var(--muted); font-style: italic }
 
+    .wk { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px }
+    .wk div { background: var(--surface-2); border-radius: 12px; padding: 10px 12px }
+    .wk small { display: block; color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em }
+    .wk b { font-size: 1.3rem }
+    .wk em { font-style: normal; font-size: .78rem; font-weight: 700; margin-left: 6px }
+    .wk em.up { color: var(--ok) } .wk em.down { color: var(--warn) } .wk em.flat { color: var(--muted) }
+    .cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px }
+    .cal-head b { font-size: 1.05rem }
+    .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center }
+    .cal .dow { font-size: .68rem; font-weight: 700; color: var(--muted); padding-bottom: 2px }
+    .cal .c { aspect-ratio: 1; display: grid; place-items: center; border-radius: 10px; font-size: .85rem; font-weight: 600; color: var(--muted) }
+    .cal .c.on { background: var(--accent); color: var(--accent-ink); font-weight: 800 }
+    .cal .c.today { box-shadow: inset 0 0 0 2px var(--gold) }
+    .cal .c.out { visibility: hidden }
+    .streak { display: flex; gap: 8px; margin-top: 10px }
+    .streak div { flex: 1; background: var(--surface-2); border-radius: 12px; padding: 8px 10px; text-align: center }
+    .streak b { display: block; font-size: 1.25rem }
+    .streak small { color: var(--muted); font-weight: 600; font-size: .75rem }
+    .pr-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line) }
+    .pr-row:first-child { border-top: 0 }
+    .pr-row small { display: block; color: var(--muted); font-weight: 600 }
+    .pr-row .v { text-align: right; font-weight: 800; white-space: nowrap }
+    .pr-row .v small { font-weight: 600 }
+    .pr-row .new { color: var(--gold); font-size: .72rem; font-weight: 800; margin-left: 6px }
+
     .toast-act {
       margin-left: 12px;
       background: none;
@@ -4855,7 +4880,139 @@
       }
 
       /* ---------- BODY VIEW ---------- */
+      /* ---------- PROGRESS: WEEK SUMMARY, CALENDAR, RECORDS ---------- */
+      var calMonth = null;
+      function weekSummary(ws) {
+        var we = ymdAdd(ws, 6), inWk = function (d) { return d >= ws && d <= we; };
+        var ss = state.sessions.filter(function (s) { return inWk(s.date); });
+        var sets = 0, vol = 0;
+        ss.forEach(function (s) { for (var k in (s.sets || {})) s.sets[k].forEach(function (p) { sets++; vol += p[0] * p[1]; }); });
+        var days = {}, pro = 0;
+        state.food.forEach(function (fd) { if (inWk(fd.date)) { days[fd.date] = 1; pro += fd.p || 0; } });
+        var nd = Object.keys(days).length;
+        var kgs = state.body.filter(function (b) { return b.kg != null && inWk(b.date); }).map(function (b) { return b.kg; });
+        return {
+          workouts: ss.length, sets: sets, vol: vol,
+          protein: nd ? pro / nd : null,
+          kg: kgs.length ? kgs.reduce(function (a, b) { return a + b; }, 0) / kgs.length : null
+        };
+      }
+      function renderWeekCard() {
+        var ws = weekStart(), cur = weekSummary(ws), prev = weekSummary(ymdAdd(ws, -7));
+        function cell(label, v, pv, fmt, unit, upGood) {
+          var em = null;
+          if (v != null && pv != null) {
+            var dlt = v - pv, shown = fmt(Math.abs(dlt));
+            em = h("em", { class: Math.abs(dlt) < 1e-9 ? "flat" : (dlt > 0) === upGood ? "up" : "down", text: Math.abs(dlt) < 1e-9 ? "same" : (dlt > 0 ? "▲ " : "▼ ") + shown });
+          }
+          return h("div", {}, [h("small", { text: label }), h("b", { text: v == null ? "–" : fmt(v) + (unit || "") }), em]);
+        }
+        var cutting = goals().kg <= ((state.body.filter(function (b) { return b.kg != null; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0] || {}).kg || Infinity);
+        var r1 = function (x) { return mbFmt(Math.round(x * 10) / 10); }, r0 = function (x) { return Math.round(x).toLocaleString(); };
+        return h("div", { class: "card" }, [
+          h("div", { class: "chart-head" }, [h("div", {}, [h("small", { text: "This week · from " + mbDay(ws) }), h("br"), h("b", { text: "Compared with last week" })])]),
+          h("div", { class: "wk" }, [
+            cell("Workouts", cur.workouts, prev.workouts, r0, "", true),
+            cell("Sets", cur.sets, prev.sets, r0, "", true),
+            cell("Volume", cur.vol, prev.vol, r0, " kg", true),
+            cell("Avg protein", cur.protein, prev.protein, r0, " g", true),
+            cell("Avg weight", cur.kg, prev.kg, r1, " kg", !cutting)
+          ])
+        ]);
+      }
+      // Weeks in a row (Saturday to Friday) with at least one workout. The current week only counts once it has one.
+      function weekStreak() {
+        var weeks = {};
+        state.sessions.forEach(function (s) { var w = weekStart(s.date); if (w) weeks[w] = 1; });
+        var w = weekStart(), n = 0;
+        if (!weeks[w]) w = ymdAdd(w, -7);
+        while (weeks[w]) { n++; w = ymdAdd(w, -7); }
+        return n;
+      }
+      function renderCalendar() {
+        var t = ymdParse(today());
+        if (!calMonth) calMonth = [t.getFullYear(), t.getMonth()];
+        var y = calMonth[0], m = calMonth[1];
+        var trained = {};
+        state.sessions.forEach(function (s) { trained[s.date] = (trained[s.date] || 0) + 1; });
+        var first = new Date(y, m, 1), lead = (first.getDay() + 1) % 7, daysIn = new Date(y, m + 1, 0).getDate();
+        var grid = h("div", { class: "cal", role: "grid", "aria-label": MB_MON[m] + " " + y });
+        ["Sa", "Su", "Mo", "Tu", "We", "Th", "Fr"].forEach(function (d) { grid.appendChild(h("div", { class: "dow", text: d })); });
+        for (var i = 0; i < lead; i++) grid.appendChild(h("div", { class: "c out" }));
+        var inMonth = 0;
+        for (var dd = 1; dd <= daysIn; dd++) {
+          var ymd = fmt(new Date(y, m, dd)), on = !!trained[ymd];
+          if (on) inMonth++;
+          grid.appendChild(h("div", { class: "c" + (on ? " on" : "") + (ymd === today() ? " today" : ""), role: "gridcell", "aria-label": mbDay(ymd) + (on ? ", trained" : ""), text: String(dd) }));
+        }
+        var prev = h("button", { class: "icon-btn mnav", type: "button", "aria-label": "Previous month", text: "‹" });
+        var next = h("button", { class: "icon-btn mnav", type: "button", "aria-label": "Next month", text: "›" });
+        prev.onclick = function () { calMonth = m === 0 ? [y - 1, 11] : [y, m - 1]; rerenderKeepScroll(); };
+        next.onclick = function () { calMonth = m === 11 ? [y + 1, 0] : [y, m + 1]; rerenderKeepScroll(); };
+        next.disabled = y > t.getFullYear() || (y === t.getFullYear() && m >= t.getMonth());
+        var streak = weekStreak();
+        return h("div", { class: "card" }, [
+          h("div", { class: "cal-head" }, [prev, h("b", { text: MB_MON[m] + " " + y }), next]),
+          grid,
+          h("div", { class: "streak" }, [
+            h("div", {}, [h("b", { text: (streak ? "🔥 " : "") + streak }), h("small", { text: "week streak" })]),
+            h("div", {}, [h("b", { text: String(inMonth) }), h("small", { text: "workouts in " + MB_MON[m] })]),
+            h("div", {}, [h("b", { text: String(state.sessions.length) }), h("small", { text: "all time" })])
+          ])
+        ]);
+      }
+      function rerenderKeepScroll() { var sy = window.scrollY; render(); window.scrollTo(0, sy); }
+      // Best set per exercise: heaviest weight (most reps at that weight); bodyweight-only exercises use most reps.
+      function personalRecords() {
+        var best = {};
+        state.sessions.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }).forEach(function (s) {
+          for (var n in (s.sets || {})) s.sets[n].forEach(function (p) {
+            var b = best[n], e1 = p[0] > 0 ? p[0] * (1 + p[1] / 30) : 0;
+            var better = !b || p[0] > b.w || (p[0] === b.w && p[1] > b.r);
+            if (better) best[n] = { name: n, w: p[0], r: p[1], date: s.date, e1: Math.max(e1, b ? b.e1 : 0) };
+            else if (e1 > b.e1) b.e1 = e1;
+          });
+        });
+        return Object.keys(best).map(function (k) { return best[k]; }).sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : a.name < b.name ? -1 : 1; });
+      }
+      function prRow(p) {
+        var fresh = daysBetween(p.date, today()) <= 7;
+        return h("div", { class: "pr-row" }, [
+          h("div", {}, [h("b", { text: p.name }), fresh ? h("span", { class: "new", text: "NEW" }) : null, h("small", { text: mbDay(p.date) })]),
+          h("div", { class: "v" }, [p.w > 0 ? mbFmt(p.w) + " kg × " + p.r : p.r + " reps", p.w > 0 ? h("small", { text: "est. 1RM " + Math.round(p.e1) + " kg" }) : null])
+        ]);
+      }
+      function openRecordsModal() {
+        var box = $("mbox"); box.textContent = "";
+        var close = h("button", { class: "btn ghost sm", type: "button", text: "Close" });
+        close.onclick = closeModal;
+        var prs = personalRecords();
+        box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Personal Records" }), close]));
+        var list = h("div", {});
+        prs.forEach(function (p) { list.appendChild(prRow(p)); });
+        box.appendChild(list);
+        $("modal").hidden = false; close.focus();
+      }
+      function renderRecordsCard() {
+        var prs = personalRecords();
+        var card = h("div", { class: "card" });
+        if (!prs.length) { card.appendChild(h("div", { class: "empty", text: "Your best lifts appear here after your first workout." })); return card; }
+        prs.slice(0, 5).forEach(function (p) { card.appendChild(prRow(p)); });
+        if (prs.length > 5) {
+          var all = h("button", { class: "btn ghost", type: "button", text: "View all " + prs.length + " records" });
+          all.onclick = openRecordsModal;
+          card.appendChild(all);
+        }
+        return card;
+      }
+
       function renderBody(root) {
+        root.appendChild(h("h2", { text: "This Week" }));
+        root.appendChild(renderWeekCard());
+        root.appendChild(h("h2", { text: "Training Calendar" }));
+        root.appendChild(renderCalendar());
+        root.appendChild(h("h2", { text: "Personal Records" }));
+        root.appendChild(renderRecordsCard());
         root.appendChild(renderMuscleCard(!!fx.enter));
         var sorted = state.body.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
         var withKg = sorted.filter(function (b) { return b.kg != null; });
