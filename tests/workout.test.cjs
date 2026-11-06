@@ -282,3 +282,47 @@ test('backup reminder appears once there are workouts to lose and goes away afte
   const fresh = app(t, { sessions: sessions.slice(0, 2) });
   assert.equal(fresh.doc.querySelector('.backup-nag'), null);
 });
+
+test('sets can be added or removed for today only, and notes are saved with the workout', t => {
+  const a = app(t);
+  const card = () => a.doc.querySelector('.ex');
+  assert.equal(card().querySelectorAll('.set').length, 4);
+  a.click('＋ Add set');
+  assert.equal(card().querySelectorAll('.set').length, 5);
+  assert.match(a.doc.querySelector('.session-dock').textContent, /0 \/ 21 sets/);
+  const rows = card().querySelectorAll('.set');
+  a.input(rows[4].querySelectorAll('input')[0], '60');
+  a.input(rows[4].querySelectorAll('input')[1], '5');
+  rows[4].querySelector('.chk').click();
+  a.click('− Remove set');
+  assert.match(a.doc.getElementById('toast').textContent, /Undo the last set/);
+  const note = card().querySelector('.ex-note textarea');
+  note.value = 'Narrow grip'; note.dispatchEvent(new a.w.Event('input'));
+  a.click('Finish workout');
+  const sn = a.doc.querySelector('#mbox .sess-note');
+  sn.value = 'Slept badly'; sn.dispatchEvent(new a.w.Event('input'));
+  a.click('Save workout');
+  const s = a.state().sessions[0];
+  assert.deepEqual(s.sets['Bench press'], [[60, 5]]);
+  assert.equal(s.notes['Bench press'], 'Narrow grip');
+  assert.equal(s.note, 'Slept badly');
+  assert.deepEqual(a.state().setAdj, {});
+  a.doc.querySelector('button.day').click();
+  assert.equal(a.doc.querySelector('.ex').querySelectorAll('.set').length, 4);
+  assert.match(a.doc.querySelector('.last-note').textContent, /Narrow grip/);
+});
+
+test('warm-up ramps toward the working weight with plates for barbell lifts', t => {
+  const a = app(t, { sessions: [{ id: '1', day: 'old', date: '2026-10-01', sets: { 'Bench press': [[100, 6], [100, 6], [100, 5], [100, 5]] } }] });
+  a.click('🔥 Warm-up');
+  const rows = [...a.doc.querySelectorAll('#mbox .warm-row')].map(r => r.textContent);
+  assert.match(rows[0], /20 kg × 10.*Empty bar/);
+  assert.match(rows.at(-1), /100 kg · working sets/);
+  const weights = [...a.doc.querySelectorAll('#mbox .warm-row b')].map(b => parseFloat(b.textContent));
+  assert.deepEqual(weights, [...weights].sort((x, y) => x - y));
+  assert.ok(rows.some(r => /45 kg × 5.*10 \+ 2\.5 a side/.test(r)));
+  assert.equal(rows.length, 5);
+  const w = a.doc.querySelector('#mbox input');
+  w.value = '30'; w.dispatchEvent(new a.w.Event('input'));
+  assert.ok(a.doc.querySelectorAll('#mbox .warm-row').length <= 3);
+});

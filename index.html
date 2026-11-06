@@ -1152,6 +1152,19 @@
     .backup-nag .btn { padding-top: 9px; padding-bottom: 9px; min-height: 0 }
     .backup-nag b { display: block; font-size: 1rem; margin-bottom: 2px }
 
+    .set-adjust { display: flex; gap: 8px; margin-top: 8px }
+    .set-adjust .btn { flex: 1; padding: 8px; min-height: 0; font-size: .85rem }
+    .ex-note textarea, .sess-note { width: 100%; min-height: 64px; resize: vertical; font: 500 .92rem var(--f-body); padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; box-sizing: border-box }
+    .ex-note { margin-top: 8px }
+    .ex-note summary { cursor: pointer; font-weight: 700; font-size: .85rem; color: var(--muted); padding: 4px 0 }
+    .last-note { margin-top: 8px; font-size: .85rem; color: var(--muted); font-style: italic }
+    .warm { display: flex; flex-direction: column; gap: 6px }
+    .warm-row { display: grid; grid-template-columns: 2.2em 1fr auto; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line) }
+    .warm-row b { font-size: 1.05rem }
+    .warm-row small { color: var(--muted); font-weight: 600; text-align: right }
+    .warm-row.work { border-color: var(--accent); background: var(--soft) }
+    .hist-note { font-size: .85rem; color: var(--muted); font-style: italic }
+
     .toast-act {
       margin-left: 12px;
       background: none;
@@ -2460,7 +2473,7 @@
       function goals() { return Object.assign({}, GOAL_DEFAULTS, state.goals || {}); }
 
       function fresh() {
-        return { v: 2, sessions: [], body: [Object.assign({}, BASE)], food: [], drafts: {}, baselines: {}, habits: {}, theme: null, programId: "split4", custom: null, customLib: [], myFoods: [], notify: false, keepAwake: true, goals: {} };
+        return { v: 2, sessions: [], body: [Object.assign({}, BASE)], food: [], drafts: {}, baselines: {}, habits: {}, theme: null, programId: "split4", custom: null, customLib: [], myFoods: [], setAdj: {}, draftNotes: {}, notify: false, keepAwake: true, goals: {} };
       }
 
       var state = fresh(), tab = "train", dayId = "push", foodDate = today();
@@ -2629,7 +2642,7 @@
       function adopt(s) {
         state = Object.assign(fresh(), s);
         ["sessions", "body", "food", "customLib", "myFoods"].forEach(function (k) { if (!Array.isArray(state[k])) state[k] = []; });
-        ["drafts", "baselines", "habits"].forEach(function (k) { if (!state[k] || typeof state[k] !== "object") state[k] = {}; });
+        ["drafts", "baselines", "habits", "setAdj", "draftNotes"].forEach(function (k) { if (!state[k] || typeof state[k] !== "object") state[k] = {}; });
         sessionDates = state.sessionDates || {};
         state.programId = state.programId || "split4";
         state.notify = !!state.notify; state.keepAwake = state.keepAwake !== false;
@@ -2742,6 +2755,41 @@
         var allTop = work.length >= setsCount && work.every(function (p) { return p[1] >= range.hi; });
         if (allTop) return { up: true, w: Math.round((base + 2.5) * 100) / 100, r: range.lo, why: "You hit " + range.hi + "+ reps on all " + setsCount + " sets last time" };
         return { up: false, w: base, why: "Get " + range.hi + " reps on all " + setsCount + " sets, then add 2.5 kg" };
+      }
+      // Sets for an exercise in today's workout: the program's count plus any sets added or removed during the session.
+      function setsFor(d, e) {
+        var adj = (state.setAdj[dk(d.id)] || {})[e[0]] || 0;
+        return Math.max(1, e[1] + adj);
+      }
+      function platesFor(weight, bar) {
+        var side = Math.max(0, (weight - bar) / 2), plates = [];
+        [25, 20, 15, 10, 5, 2.5, 1.25].forEach(function (p) { while (side >= p - 0.01) { plates.push(p); side -= p; } });
+        return plates;
+      }
+      function isBarbell(name) {
+        return /barbell|bench press|squat|deadlift|overhead press|push press|pendlay|rack pull|good morning|hip thrust|skull|close-grip bench|jm press/i.test(name) &&
+          !/dumbbell|machine|cable|smith|goblet|hack|leg press|bodyweight|single-leg|bulgarian|split squat/i.test(name);
+      }
+      // Ramp-up sets toward a working weight, rounded to 2.5 kg. Light weights need fewer steps.
+      function warmupSets(work, barbell) {
+        var bar = barbell ? 20 : 0, out = [];
+        if (barbell && work > 20) out.push({ w: 20, r: 10, note: "Empty bar" });
+        [[0.45, 5], [0.65, 3], [0.85, 1]].forEach(function (st) {
+          if (work < 50 && st[0] > 0.8) return;
+          if (work < 35 && st[0] > 0.6) return;
+          var w = Math.round(work * st[0] / 2.5) * 2.5;
+          if (w <= bar || w >= work) return;
+          if (out.length && w <= out[out.length - 1].w) return;
+          out.push({ w: w, r: st[1] });
+        });
+        return out;
+      }
+      function lastExerciseNote(exName) {
+        for (var i = state.sessions.length - 1; i >= 0; i--) {
+          var n = state.sessions[i].notes && state.sessions[i].notes[exName];
+          if (n) return { text: n, date: state.sessions[i].date };
+        }
+        return null;
       }
       function sessionName(s) {
         if (s.dayName) return s.dayName;
@@ -3586,10 +3634,7 @@
       function openPlateModal(exName, weight, reps) {
         var box = $("mbox"); box.textContent = "";
         var oneRM = weight && reps ? Math.round(weight * (1 + reps / 30)) : 0;
-        var bar = 20, side = Math.max(0, (weight - bar) / 2), plates = [];
-        [25, 20, 15, 10, 5, 2.5, 1.25].forEach(function (p) {
-          while (side >= p - 0.01) { plates.push(p); side -= p; }
-        });
+        var plates = platesFor(weight, 20);
         var c = h("canvas", {});
         box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: exName }), h("button", { class: "btn ghost sm", text: "Close" })]));
         box.lastChild.lastChild.onclick = closeModal;
@@ -3657,6 +3702,40 @@
         ]);
       }
 
+      /* ---------- WARM-UP ---------- */
+      function openWarmupModal(exName, work) {
+        var box = $("mbox"); box.textContent = "";
+        var close = h("button", { class: "btn ghost sm", type: "button", text: "Close" });
+        close.onclick = closeModal;
+        box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Warm-up" }), close]));
+        var wIn = h("input", { type: "text", inputmode: "decimal", value: work ? String(work) : "", "aria-label": "Working weight in kg", placeholder: "kg" });
+        var list = h("div", { class: "warm" });
+        var barbell = isBarbell(exName);
+        function paint() {
+          list.textContent = "";
+          var w = num(wIn.value);
+          if (w === null || w <= 0) { list.appendChild(h("div", { class: "empty", text: "Enter your working weight to see warm-up sets." })); return; }
+          var sets = warmupSets(w, barbell);
+          if (!sets.length) list.appendChild(h("div", { class: "empty", text: "This weight is light enough to start straight away. A few easy reps are plenty." }));
+          sets.concat([{ w: w, r: null, work: true }]).forEach(function (st, i) {
+            var pl = barbell ? platesFor(st.w, 20) : null;
+            var side = st.note || (pl ? (pl.length ? pl.join(" + ") + " a side" : "Bar only") : "");
+            list.appendChild(h("div", { class: "warm-row" + (st.work ? " work" : "") }, [
+              h("span", { text: st.work ? "▶" : String(i + 1) }),
+              h("b", { text: mbFmt(st.w) + " kg" + (st.r ? " × " + st.r : " · working sets") }),
+              h("small", { text: side })
+            ]));
+          });
+        }
+        wIn.oninput = paint;
+        box.appendChild(h("div", { class: "empty", style: "text-align:left", text: exName + ". Rest about a minute between warm-up sets and keep them easy." }));
+        box.appendChild(h("label", {}, ["Working weight (kg)", wIn]));
+        box.appendChild(list);
+        paint();
+        $("modal").hidden = false;
+        close.focus();
+      }
+
       /* ---------- WORKOUT HISTORY ---------- */
       function openHistoryModal(openId) {
         var box = $("mbox"); box.textContent = "";
@@ -3677,8 +3756,10 @@
           if (m !== month) { month = m; box.appendChild(h("div", { class: "hist-month", text: m })); }
           var names = Object.keys(s.sets || {}), nSets = names.reduce(function (t, n) { return t + s.sets[n].length; }, 0);
           var body = h("div", { class: "hist-body" });
+          if (s.note) body.appendChild(h("div", { class: "hist-note", text: "📝 " + s.note }));
           names.forEach(function (n) {
             body.appendChild(h("div", { class: "hist-ex" }, [h("span", { text: n }), h("span", { text: s.sets[n].map(function (p) { return mbFmt(p[0]) + "×" + p[1]; }).join("  ") })]));
+            if (s.notes && s.notes[n]) body.appendChild(h("div", { class: "hist-note", text: s.notes[n] }));
           });
           var del = h("button", { class: "btn ghost sm", type: "button", text: "Remove workout" });
           del.onclick = function () { closeModal(); removeWithUndo("sessions", s, sessionName(s) + " · " + s.date); };
@@ -3891,14 +3972,14 @@
         if (!d) { d = DAYS[0]; dayId = d.id; }
         var draft = state.drafts[dk(d.id)] || {};
         var dateKey = dk(d.id);
-        var totalSets = d.ex.reduce(function (a, e) { return a + e[1]; }, 0);
+        var totalSets = d.ex.reduce(function (a, e) { return a + setsFor(d, e); }, 0);
         var pct = 0;
 
         // Calculate live session completion
         var doneSets = 0, liveVol = 0;
         d.ex.forEach(function (e) {
           var arr = draft[e[0]] || [];
-          arr.slice(0, e[1]).forEach(function (s) { if (s && s.done) { doneSets++; liveVol += (num(s.w) || 0) * (num(s.r) || 0); } });
+          arr.slice(0, setsFor(d, e)).forEach(function (s) { if (s && s.done) { doneSets++; liveVol += (num(s.w) || 0) * (num(s.r) || 0); } });
         });
 
         pct = totalSets ? Math.round(doneSets / totalSets * 100) : 0;
@@ -3971,7 +4052,7 @@
         root.appendChild(h("details", { class: "workout-settings" }, [h("summary", { text: "Workout settings · date & program" }), h("div", { class: "workout-tools" }, [h("label", {}, ["Session date", dateIn]), editDayBtn, sysBtn])]));
         root.appendChild(h("div", { class: "workout-heading" }, [h("div", {}, [h("h2", { text: "Your exercises" }), h("p", { text: "Enter your weight and reps, then check off each set." })])]));
         var nextExercise = null;
-        var firstUnfinished = d.ex.findIndex(function (exercise) { return (draft[exercise[0]] || []).slice(0, exercise[1]).filter(function (s) { return s && s.done; }).length < exercise[1]; });
+        var firstUnfinished = d.ex.findIndex(function (exercise) { var n = setsFor(d, exercise); return (draft[exercise[0]] || []).slice(0, n).filter(function (s) { return s && s.done; }).length < n; });
 
         if (!d.ex.length) {
           var addFirst = h("button", { class: "btn", type: "button", text: "＋ Add exercises to this day" });
@@ -3983,7 +4064,7 @@
 
         // Render Each Exercise Card with Quick "Last Weight" Memory
         d.ex.forEach(function (e, exerciseIndex) {
-          var name = e[0], setsCount = e[1], repsTarget = e[2], muscle = e[3], restSec = e[4] || 90;
+          var name = e[0], setsCount = setsFor(d, e), repsTarget = e[2], muscle = e[3], restSec = e[4] || 90;
           var hist = getExerciseHistory(name);
           var lastSets = hist.sets;
           var exDraft = (draft[name] = draft[name] || []);
@@ -4042,7 +4123,14 @@
             ]), expandBtn
           ]);
           card.appendChild(head);
-          exerciseBody.appendChild(h("div", { class: "exercise-actions" }, [fillAllBtn]));
+          var warmBtn = h("button", { class: "set-base-btn", type: "button", text: "🔥 Warm-up" });
+          warmBtn.onclick = function () {
+            var first = exDraft.filter(function (x) { return x && num(x.w) > 0; })[0];
+            var sg = suggestNext(name, e[1], repsTarget);
+            var work = first ? num(first.w) : sg ? sg.w : (lastSets.length ? Math.max.apply(null, lastSets.map(function (p) { return p[0]; })) : 0);
+            openWarmupModal(name, work);
+          };
+          exerciseBody.appendChild(h("div", { class: "exercise-actions" }, [warmBtn, fillAllBtn]));
 
           /* --- QUICK LAST LIFTED MEMORY STRIP --- */
           var lastBox = h("div", { class: "last-box" });
@@ -4080,7 +4168,7 @@
               setNow
             ]));
           }
-          var sug = suggestNext(name, setsCount, repsTarget);
+          var sug = suggestNext(name, e[1], repsTarget);
           if (sug) {
             var useBtn = null;
             if (sug.up) {
@@ -4101,6 +4189,8 @@
               useBtn
             ]));
           }
+          var prevNote = lastExerciseNote(name);
+          if (prevNote) lastBox.appendChild(h("div", { class: "last-note", text: "📝 " + prevNote.date + ": " + prevNote.text }));
           exerciseBody.appendChild(lastBox);
 
           /* --- SETS TABLE --- */
@@ -4198,6 +4288,36 @@
             (function (c) { requestAnimationFrame(function () { var r = c.getBoundingClientRect(); confetti(r.left + r.width - 48, r.top + 36, 30); }); })(card);
           }
           exerciseBody.appendChild(grid);
+
+          function adjustSets(delta) {
+            var adj = state.setAdj[dk(d.id)] = state.setAdj[dk(d.id)] || {};
+            var next = setsCount + delta;
+            if (next < 1) { toast("Keep at least one set"); return; }
+            if (delta < 0 && exDraft[next] && exDraft[next].done) { toast("Undo the last set before removing it"); return; }
+            adj[name] = next - e[1];
+            if (!adj[name]) delete adj[name];
+            if (delta < 0) exDraft.length = Math.min(exDraft.length, next);
+            state.drafts[dk(d.id)] = draft; save();
+            var scroll = window.scrollY; render(); window.scrollTo(0, scroll);
+            toast(name + ": " + next + " set" + (next === 1 ? "" : "s") + " today");
+          }
+          var addSetBtn = h("button", { class: "btn ghost", type: "button", text: "＋ Add set" });
+          addSetBtn.onclick = function () { adjustSets(1); };
+          var dropSetBtn = h("button", { class: "btn ghost", type: "button", text: "− Remove set" });
+          dropSetBtn.onclick = function () { adjustSets(-1); };
+          dropSetBtn.disabled = setsCount <= 1;
+          exerciseBody.appendChild(h("div", { class: "set-adjust" }, [addSetBtn, dropSetBtn]));
+
+          var notes = state.draftNotes[dk(d.id)] = state.draftNotes[dk(d.id)] || {};
+          var noteIn = h("textarea", { "aria-label": "Note for " + name, placeholder: "Grip, seat setting, how it felt…" });
+          noteIn.value = notes[name] || "";
+          noteIn.oninput = function () {
+            if (noteIn.value.trim()) notes[name] = noteIn.value; else delete notes[name];
+            save();
+          };
+          var noteBox = h("details", { class: "ex-note" }, [h("summary", { text: notes[name] ? "📝 Note (saved)" : "📝 Add a note" }), noteIn]);
+          if (notes[name]) noteBox.open = true;
+          exerciseBody.appendChild(noteBox);
           card.appendChild(exerciseBody);
           root.appendChild(card);
         });
@@ -4209,12 +4329,14 @@
           var sess = { id: uid(), date: dateIn.value || today(), day: d.id, dayName: d.name, prog: state.programId, sets: {} }, any = false;
           d.ex.forEach(function (e) {
             var name = e[0], arr = draft[name] || [];
-            arr.slice(0, e[1]).forEach(function (s) {
+            arr.slice(0, setsFor(d, e)).forEach(function (s) {
               var w = num(s && s.w), r = num(s && s.r);
               if (s && s.done && w !== null && w >= 0 && r !== null && r > 0 && Math.floor(r) === r) { (sess.sets[name] = sess.sets[name] || []).push([w, r]); any = true; }
             });
           });
           if (!any) { toast("Log at least one set first"); return; }
+          var dn = state.draftNotes[dk(d.id)] || {};
+          Object.keys(dn).forEach(function (n) { if (n !== "_session" && sess.sets[n] && dn[n].trim()) (sess.notes = sess.notes || {})[n] = dn[n].trim(); });
           var prs = [];
           d.ex.forEach(function (e) {
             var arr = sess.sets[e[0]]; if (!arr) return;
@@ -4233,14 +4355,21 @@
             h("div", {}, [h("b", { text: Math.round(savedVolume).toLocaleString() }), h("small", { text: "kg volume" })])
           ]));
           box.appendChild(h("p", { text: savedSets < totalSets ? "You've completed " + savedSets + " of " + totalSets + " sets. Only checked sets will be saved." : "Every set complete. Ready to save your workout?" }));
+          var sessNote = h("textarea", { class: "sess-note", "aria-label": "Workout notes", placeholder: "Workout notes (optional): energy, sleep, anything to remember" });
+          sessNote.value = dn._session || "";
+          sessNote.oninput = function () { var dd = state.draftNotes[dk(d.id)] = state.draftNotes[dk(d.id)] || {}; dd._session = sessNote.value; save(); };
+          box.appendChild(sessNote);
           var keepGoing = h("button", { class: "btn ghost", text: "Keep training", type: "button" });
           var confirmSave = h("button", { class: "btn", text: "Save workout", type: "button" });
           keepGoing.onclick = closeModal;
           modalOnClose = function () { saveBtn.focus({ preventScroll: true }); };
           confirmSave.onclick = function () {
             confirmSave.disabled = true;
+            if (sessNote.value.trim()) sess.note = sessNote.value.trim();
             state.sessions.push(sess);
             delete state.drafts[dk(d.id)];
+            delete state.setAdj[dk(d.id)];
+            delete state.draftNotes[dk(d.id)];
             delete sessionDates[dateKey]; state.sessionDates = sessionDates;
             if (rest.iv) clearInterval(rest.iv); rest.iv = null; endRestUI();
             closeModal();
