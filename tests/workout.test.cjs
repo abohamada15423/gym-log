@@ -240,3 +240,45 @@ test('workout history lists every session newest first with its sets', t => {
   a.click('Undo');
   assert.equal(a.state().sessions.length, 8);
 });
+
+test('custom food with macros works out calories, totals carbs and fat, and can be saved to My Foods', t => {
+  const a = app(t);
+  a.doc.getElementById('t-meals').click();
+  const field = label => [...a.doc.querySelectorAll('label')].find(l => l.textContent.startsWith(label)).querySelector('input');
+  field('Food').value = 'Oats bowl';
+  field('Protein').value = '20';
+  field('Carbs').value = '60';
+  field('Fat').value = '10';
+  a.doc.querySelector('.check input').checked = true;
+  a.click('Add Food');
+  const food = a.state().food[0];
+  assert.equal(food.kcal, 4 * 20 + 4 * 60 + 9 * 10);
+  assert.deepEqual([food.c, food.f], [60, 10]);
+  assert.match(a.doc.querySelector('.macros').textContent, /Carbs 60 g.*Fat 10 g/);
+  a.click('+ Oats bowl (20g P)');
+  assert.equal(a.state().food.length, 2);
+  a.doc.querySelector('[aria-label="Delete Oats bowl from My Foods"]').click();
+  assert.equal(a.state().myFoods.length, 0);
+  a.click('Undo');
+  assert.equal(a.state().myFoods.length, 1);
+});
+
+test('backup reminder appears once there are workouts to lose and goes away after a backup or snooze', t => {
+  const sessions = [1, 2, 3].map(i => ({ id: 's' + i, day: 'old', date: '2026-10-0' + i, sets: {} }));
+  const a = app(t, { sessions });
+  a.w.URL.createObjectURL = () => 'blob:x';
+  a.w.URL.revokeObjectURL = () => {};
+  a.w.HTMLAnchorElement.prototype.click = () => {};
+  assert.ok(a.doc.querySelector('.backup-nag'));
+  a.click('Back up now');
+  assert.equal(a.doc.querySelector('.backup-nag'), null);
+  assert.equal(a.state().backupCount, 3);
+
+  const old = app(t, { sessions: sessions.concat({ id: 's4', day: 'old', date: '2026-10-04', sets: {} }), lastBackup: '2020-01-01', backupCount: 3 });
+  assert.match(old.doc.querySelector('.backup-nag').textContent, /last backup was \d+ days ago/);
+  old.click('Remind me later');
+  assert.equal(old.doc.querySelector('.backup-nag'), null);
+
+  const fresh = app(t, { sessions: sessions.slice(0, 2) });
+  assert.equal(fresh.doc.querySelector('.backup-nag'), null);
+});

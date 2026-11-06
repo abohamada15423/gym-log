@@ -817,6 +817,14 @@
       font-size: .86rem
     }
 
+    .myfood { display: inline-flex; align-items: stretch; border-radius: 12px }
+    .myfood .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0 }
+    .myfood .btn.x { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; padding: 8px 10px; color: var(--muted) }
+    .macros { display: flex; justify-content: center; gap: 18px; margin: -4px 0 4px; font-weight: 700; font-size: .9rem }
+    .macros span { color: var(--muted); font-weight: 600 }
+    label.check { display: flex; flex-direction: row; align-items: center; gap: 10px; color: var(--ink); font-weight: 600; text-transform: none; letter-spacing: 0; font-size: .92rem }
+    label.check input { width: 20px; height: 20px; min-height: 0; flex: none; accent-color: var(--accent) }
+
     /* Lists & Stats */
     .list {
       display: flex;
@@ -1138,6 +1146,11 @@
     .hist-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px }
     .hist-ex { display: flex; justify-content: space-between; gap: 10px; font-size: .88rem; border-top: 1px solid var(--line); padding-top: 6px }
     .hist-ex span:last-child { color: var(--muted); text-align: right; font-family: var(--f-mono, monospace); font-size: .8rem }
+
+    .backup-nag { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-color: var(--gold); background: var(--gold-soft) }
+    .backup-nag p { margin: 0; font-size: .88rem; line-height: 1.35 }
+    .backup-nag .btn { padding-top: 9px; padding-bottom: 9px; min-height: 0 }
+    .backup-nag b { display: block; font-size: 1rem; margin-bottom: 2px }
 
     .toast-act {
       margin-left: 12px;
@@ -2447,7 +2460,7 @@
       function goals() { return Object.assign({}, GOAL_DEFAULTS, state.goals || {}); }
 
       function fresh() {
-        return { v: 2, sessions: [], body: [Object.assign({}, BASE)], food: [], drafts: {}, baselines: {}, habits: {}, theme: null, programId: "split4", custom: null, customLib: [], notify: false, keepAwake: true, goals: {} };
+        return { v: 2, sessions: [], body: [Object.assign({}, BASE)], food: [], drafts: {}, baselines: {}, habits: {}, theme: null, programId: "split4", custom: null, customLib: [], myFoods: [], notify: false, keepAwake: true, goals: {} };
       }
 
       var state = fresh(), tab = "train", dayId = "push", foodDate = today();
@@ -2615,7 +2628,7 @@
       // Make saved or imported data safe to use: fill in anything older versions did not store.
       function adopt(s) {
         state = Object.assign(fresh(), s);
-        ["sessions", "body", "food", "customLib"].forEach(function (k) { if (!Array.isArray(state[k])) state[k] = []; });
+        ["sessions", "body", "food", "customLib", "myFoods"].forEach(function (k) { if (!Array.isArray(state[k])) state[k] = []; });
         ["drafts", "baselines", "habits"].forEach(function (k) { if (!state[k] || typeof state[k] !== "object") state[k] = {}; });
         sessionDates = state.sessionDates || {};
         state.programId = state.programId || "split4";
@@ -3602,6 +3615,48 @@
         $("modal").hidden = false;
       }
 
+      /* ---------- BACKUP ---------- */
+      function daysBetween(a, b) { var x = ymdParse(a), y = ymdParse(b); return x && y ? Math.round((y - x) / 864e5) : 0; }
+      // Due when there are 3+ workouts and either no backup yet, or 14+ days and new workouts since the last one.
+      function backupDue() {
+        if (state.sessions.length < 3) return false;
+        if (state.backupSnooze && today() < state.backupSnooze) return false;
+        if (!state.lastBackup) return true;
+        return daysBetween(state.lastBackup, today()) >= 14 && state.sessions.length !== (state.backupCount || 0);
+      }
+      function markBackedUp() {
+        state.lastBackup = today(); state.backupCount = state.sessions.length; delete state.backupSnooze;
+        save(); render(); toast("Backup saved ✓");
+      }
+      // Share sheet where available (lets iPhone users save to Files or send it), otherwise a download.
+      function exportBackup() {
+        var name = "gymlog-backup-" + today() + ".json", text = JSON.stringify(state, null, 2);
+        try {
+          var file = new File([text], name, { type: "application/json" });
+          if (navigator.canShare && navigator.share && navigator.canShare({ files: [file] })) {
+            navigator.share({ files: [file], title: "Gym Log backup" }).then(markBackedUp).catch(function () { });
+            return;
+          }
+        } catch (e) { }
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+        a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+        markBackedUp();
+      }
+      function backupNag() {
+        var later = h("button", { class: "btn ghost", type: "button", text: "Remind me later" });
+        later.onclick = function () { state.backupSnooze = ymdAdd(today(), 3); save(); render(); };
+        var now = h("button", { class: "btn", type: "button", text: "Back up now" });
+        now.onclick = exportBackup;
+        var since = state.lastBackup ? "Your last backup was " + daysBetween(state.lastBackup, today()) + " days ago." : "You haven't backed up yet.";
+        return h("section", { class: "card backup-nag", role: "region", "aria-label": "Backup reminder" }, [
+          h("p", {}, [h("b", { text: "Back up your " + state.sessions.length + " workouts" }), since + " They only live on this phone."]),
+          h("div", { class: "grid2" }, [later, now])
+        ]);
+      }
+
       /* ---------- WORKOUT HISTORY ---------- */
       function openHistoryModal(openId) {
         var box = $("mbox"); box.textContent = "";
@@ -3863,6 +3918,7 @@
           ])
         ]);
         root.appendChild(hero);
+        if (backupDue()) root.appendChild(backupNag());
         countUp(volB, lastPct.day === dayId ? lastPct.vol : 0, liveVol);
         lastPct = { day: dayId, pct: pct, vol: liveVol };
 
@@ -4749,42 +4805,82 @@
       function renderMeals(root) {
         var dateIn = h("input", { type: "date", value: foodDate });
         dateIn.onchange = function () { foodDate = dateIn.value || today(); render(); };
-        var rows = state.food.filter(function (f) { return f.date === foodDate; }), kc = 0, pr = 0;
-        rows.forEach(function (f) { kc += f.kcal; pr += f.p; });
+        var rows = state.food.filter(function (f) { return f.date === foodDate; }), kc = 0, pr = 0, cb = 0, ft = 0;
+        rows.forEach(function (f) { kc += f.kcal; pr += f.p; cb += f.c || 0; ft += f.f || 0; });
+        function addFood(m) {
+          var e = { id: uid(), date: foodDate, name: m.name, kcal: m.kcal, p: m.p };
+          if (m.c != null) e.c = m.c; if (m.f != null) e.f = m.f;
+          state.food.push(e); save(); toast(m.name + " added"); render();
+        }
+        function macroText(m) {
+          var t = m.kcal + " kcal · " + mbFmt(m.p) + "g P";
+          if (m.c != null) t += " · " + mbFmt(m.c) + "g C";
+          if (m.f != null) t += " · " + mbFmt(m.f) + "g F";
+          return t;
+        }
 
         root.appendChild(h("label", {}, ["Date", dateIn]));
         root.appendChild(h("div", { class: "rings" }, [
           ring("Calories", kc, goals().kcal, "kcal", ""),
           ring("Protein", pr, goals().protein, "g", "gold")
         ]));
+        if (cb || ft) root.appendChild(h("div", { class: "macros" }, [
+          h("div", {}, [h("span", { text: "Carbs " }), mbFmt(Math.round(cb)) + " g"]),
+          h("div", {}, [h("span", { text: "Fat " }), mbFmt(Math.round(ft)) + " g"])
+        ]));
+
+        if (state.myFoods.length) {
+          root.appendChild(h("h2", { text: "My Foods" }));
+          var mine = h("div", { class: "fchips" });
+          state.myFoods.forEach(function (m) {
+            var b = h("button", { class: "btn ghost", type: "button", text: "+ " + m.name + " (" + mbFmt(m.p) + "g P)", title: macroText(m) });
+            b.onclick = function () { addFood(m); };
+            var x = h("button", { class: "btn ghost x", type: "button", "aria-label": "Delete " + m.name + " from My Foods", text: "✕" });
+            x.onclick = function () { removeWithUndo("myFoods", m, m.name); };
+            mine.appendChild(h("span", { class: "myfood" }, [b, x]));
+          });
+          root.appendChild(mine);
+        }
 
         root.appendChild(h("h2", { text: "Quick Add Meals & High-Protein Staples" }));
         var chips = h("div", { class: "fchips" });
         MEALS.concat(QUICK_FOODS).forEach(function (m) {
           var b = h("button", { class: "btn ghost", text: "+ " + m.name + " (" + m.p + "g P)" });
-          b.onclick = function () {
-            state.food.push({ id: uid(), date: foodDate, name: m.name, kcal: m.kcal, p: m.p });
-            save(); toast(m.name + " added"); render();
-          };
+          b.onclick = function () { addFood(m); };
           chips.appendChild(b);
         });
         root.appendChild(chips);
 
+        root.appendChild(h("h2", { text: "Add Custom Food" }));
         var f = {
           name: h("input", { type: "text", placeholder: "Food name", style: "text-align:left" }),
-          kcal: h("input", { type: "text", inputmode: "numeric", placeholder: "kcal" }),
-          pro: h("input", { type: "text", inputmode: "decimal", placeholder: "g" })
+          kcal: h("input", { type: "text", inputmode: "numeric", placeholder: "auto" }),
+          pro: h("input", { type: "text", inputmode: "decimal", placeholder: "g" }),
+          carb: h("input", { type: "text", inputmode: "decimal", placeholder: "g" }),
+          fat: h("input", { type: "text", inputmode: "decimal", placeholder: "g" }),
+          keep: h("input", { type: "checkbox" })
         };
-        var add = h("button", { class: "btn", text: "Add Custom Food" });
+        var add = h("button", { class: "btn", text: "Add Food" });
         add.onclick = function () {
-          var k = num(f.kcal.value), p = num(f.pro.value);
-          if (k === null || k <= 0) { toast("Enter calories"); return; }
-          state.food.push({ id: uid(), date: foodDate, name: f.name.value.trim() || "Food", kcal: Math.round(k), p: p || 0 });
-          save(); toast("Added"); render();
+          var k = num(f.kcal.value), p = num(f.pro.value), c = num(f.carb.value), ff = num(f.fat.value);
+          if ([p, c, ff].some(function (v) { return v !== null && v < 0; })) { toast("Macros can't be negative"); return; }
+          if ((k === null || k <= 0) && (p || c || ff)) k = 4 * (p || 0) + 4 * (c || 0) + 9 * (ff || 0);
+          if (k === null || k <= 0) { toast("Enter calories or macros"); return; }
+          var m = { name: f.name.value.trim() || "Food", kcal: Math.round(k), p: p || 0 };
+          if (c !== null) m.c = c; if (ff !== null) m.f = ff;
+          if (f.keep.checked) {
+            if (!f.name.value.trim()) { toast("Name the food to save it"); f.name.focus(); return; }
+            state.myFoods = state.myFoods.filter(function (x) { return x.name.toLowerCase() !== m.name.toLowerCase(); });
+            state.myFoods.push(Object.assign({}, m));
+          }
+          addFood(m);
         };
         root.appendChild(h("div", { class: "card", style: "display:flex;flex-direction:column;gap:10px" }, [
           h("label", {}, ["Food", f.name]),
           h("div", { class: "grid2" }, [h("label", {}, ["Calories", f.kcal]), h("label", {}, ["Protein (g)", f.pro])]),
+          h("div", { class: "grid2" }, [h("label", {}, ["Carbs (g)", f.carb]), h("label", {}, ["Fat (g)", f.fat])]),
+          h("label", { class: "check" }, [f.keep, "Save to My Foods for one-tap adding"]),
+          h("div", { class: "note", text: "Leave calories empty to work them out from the macros." }),
           add
         ]));
 
@@ -4793,9 +4889,10 @@
         rows.forEach(function (r) {
           var del = h("button", { class: "btn ghost sm", text: "Remove" });
           del.onclick = function () { removeWithUndo("food", r, r.name); };
+          var mac = mbFmt(r.p) + "g protein" + (r.c != null ? " · " + mbFmt(r.c) + "g carbs" : "") + (r.f != null ? " · " + mbFmt(r.f) + "g fat" : "");
           list.appendChild(h("div", { class: "item" }, [
-            h("div", { text: r.name }),
-            h("div", { class: "row-r" }, [h("div", { class: "v", text: r.kcal + " kcal · " + r.p + "g P" }), del])
+            h("div", {}, [h("div", { text: r.name }), h("div", { class: "d", text: mac })]),
+            h("div", { class: "row-r" }, [h("div", { class: "v", style: "white-space:nowrap", text: r.kcal + " kcal" }), del])
           ]));
         });
         root.appendChild(list);
@@ -4863,13 +4960,7 @@
 
         root.appendChild(h("h2", { text: "Backup & Restore (Keep Your Data Safe)" }));
         var expBtn = h("button", { class: "btn", text: "⬇ Export Backup (JSON)" });
-        expBtn.onclick = function () {
-          var blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-          var a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = "gymlog-backup-" + today() + ".json";
-          a.click();
-        };
+        expBtn.onclick = exportBackup;
         var fileIn = h("input", { type: "file", accept: ".json", style: "display:none" });
         var impBtn = h("button", { class: "btn ghost", text: "⬆ Import Backup (JSON)" });
         impBtn.onclick = function () { fileIn.click(); };
@@ -4888,7 +4979,10 @@
           reader.readAsText(file);
           fileIn.value = "";
         };
-        root.appendChild(h("div", { class: "card grid2" }, [expBtn, impBtn, fileIn]));
+        root.appendChild(h("div", { class: "card", style: "display:flex;flex-direction:column;gap:10px" }, [
+          h("div", { class: "grid2" }, [expBtn, impBtn, fileIn]),
+          h("div", { class: "note", text: state.lastBackup ? "Last backup: " + mbDay(state.lastBackup) + " (" + (state.backupCount || 0) + " workouts)." : "No backup yet. Your data only lives on this device." })
+        ]));
 
         root.appendChild(h("h2", { text: "Progression Rules" }));
         var ul = h("ul", { class: "rules" });
