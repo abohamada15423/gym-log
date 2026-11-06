@@ -24,6 +24,7 @@ function beep() {
   } catch (e) { }
 }
 function showNotif(title, body) {
+  title = trText(title); body = trText(body);
   var o = { body: body, icon: "icon-192.png", badge: "icon-192.png", tag: "gymlog", renotify: true, vibrate: [200, 100, 200] };
   function direct() { try { new Notification(title, o); } catch (e) { } }
   try {

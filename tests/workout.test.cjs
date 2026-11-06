@@ -400,3 +400,38 @@ test('check-ins take extra measurements and each one gets its own trend chart', 
   a.click('Save Check-in');
   assert.match(a.doc.getElementById('toast').textContent, /body fat/);
 });
+
+test('Arabic switches the page to right-to-left and translates it, and English restores it', async t => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const a = app(t, { sessions: [{ id: '1', day: 'old', date: '2026-10-01', sets: { 'Bench press': [[80, 6], [80, 6], [80, 6], [80, 6]] } }] });
+  a.doc.getElementById('t-plan').click();
+  a.click('العربية');
+  await tick();
+  assert.equal(a.doc.documentElement.getAttribute('dir'), 'rtl');
+  assert.equal(a.state().lang, 'ar');
+  assert.equal(a.doc.getElementById('t-train').textContent.trim(), 'التمرين');
+  assert.ok(a.doc.body.textContent.includes('أهدافك'));
+  assert.ok([...a.doc.querySelectorAll('.lang-switch button')].some(b => b.textContent === 'English'));
+  a.doc.getElementById('t-train').click();
+  await tick();
+  const card = a.doc.querySelector('.ex');
+  assert.match(card.querySelector('.ex-count').textContent, /المجموعات المكتملة: 0 من 4/);
+  assert.match(card.querySelector('.suggest').textContent, /التالي: 82\.5 كجم × 6/);
+  assert.equal(card.querySelector('.ex-name').textContent, 'Bench press');
+  assert.match(card.querySelector('.chk').getAttribute('aria-label'), /^إكمال Bench press، المجموعة 1$/);
+  a.click('＋ إضافة مجموعة');
+  await tick();
+  assert.match(a.doc.getElementById('toast').textContent, /Bench press: 5 مجموعات اليوم/);
+  // reload keeps Arabic
+  const again = app(t, a.state());
+  await tick();
+  assert.equal(again.doc.documentElement.getAttribute('lang'), 'ar');
+  assert.equal(again.doc.querySelector('.session-dock .btn').textContent, 'إنهاء التمرين');
+  // back to English without reloading
+  a.doc.getElementById('t-plan').click();
+  a.click('English');
+  await tick();
+  assert.equal(a.doc.documentElement.getAttribute('dir'), 'ltr');
+  assert.equal(a.doc.getElementById('t-train').textContent.trim(), 'Train');
+  assert.ok(a.doc.body.textContent.includes('Your Goals'));
+});

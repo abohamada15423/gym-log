@@ -133,7 +133,7 @@ function openWarmupModal(exName, work) {
     });
   }
   wIn.oninput = paint;
-  box.appendChild(h("div", { class: "empty", style: "text-align:left", text: exName + ". Rest about a minute between warm-up sets and keep them easy." }));
+  box.appendChild(h("div", { class: "empty", style: "text-align:start", text: exName + ". Rest about a minute between warm-up sets and keep them easy." }));
   box.appendChild(h("label", {}, ["Working weight (kg)", wIn]));
   box.appendChild(list);
   paint();
@@ -194,7 +194,7 @@ function openDayEditor(did) {
     var done = h("button", { class: "btn sm", type: "button", text: "Done" });
     done.onclick = closeModal;
     box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Edit Day" }), done]));
-    var nameIn = h("input", { type: "text", value: d.name, style: "text-align:left" });
+    var nameIn = h("input", { type: "text", value: d.name, style: "text-align:start" });
     nameIn.oninput = function () { d.name = nameIn.value; save(); };
     box.appendChild(h("label", {}, ["Day name", nameIn]));
     if (!d.ex.length) box.appendChild(h("div", { class: "empty", text: "No exercises yet. Add some from the library." }));
@@ -236,7 +236,7 @@ function openPicker(d, back) {
   var done = h("button", { class: "btn sm", type: "button", text: "Done" });
   done.onclick = back;
   box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Exercise Library" }), done]));
-  var search = h("input", { type: "text", placeholder: "Search exercises…", style: "text-align:left" });
+  var search = h("input", { type: "text", placeholder: "Search exercises…", style: "text-align:start" });
   var chipRow = h("div", { class: "fchips" });
   var listEl = h("div", { class: "list" });
   box.appendChild(search); box.appendChild(chipRow); box.appendChild(listEl);
@@ -275,7 +275,7 @@ function openPicker(d, back) {
   search.oninput = function () { q = search.value.trim().toLowerCase(); paintList(); };
   paintChips(); paintList();
 
-  var nIn = h("input", { type: "text", placeholder: "Exercise name", style: "text-align:left" });
+  var nIn = h("input", { type: "text", placeholder: "Exercise name", style: "text-align:start" });
   var gSel = h("select", {}, GROUPS.map(function (g) { return h("option", { value: g, text: g }); }));
   var sIn = h("input", { type: "text", inputmode: "numeric", value: "3" });
   var rIn = h("input", { type: "text", value: "10" });
@@ -338,7 +338,7 @@ function renderPrograms(root) {
 
   if (state.programId === "custom" && state.custom) {
     root.appendChild(h("h2", { text: "Edit My Program" }));
-    var nameIn = h("input", { type: "text", value: state.custom.name, style: "text-align:left" });
+    var nameIn = h("input", { type: "text", value: state.custom.name, style: "text-align:start" });
     nameIn.oninput = function () { state.custom.name = nameIn.value || "My Program"; save(); };
     var list = h("div", { class: "list" });
     state.custom.days.forEach(function (d) {

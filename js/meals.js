@@ -64,7 +64,7 @@ function renderMeals(root) {
 
   root.appendChild(h("h2", { text: "Add Custom Food" }));
   var f = {
-    name: h("input", { type: "text", placeholder: "Food name", style: "text-align:left" }),
+    name: h("input", { type: "text", placeholder: "Food name", style: "text-align:start" }),
     kcal: h("input", { type: "text", inputmode: "numeric", placeholder: "auto" }),
     pro: h("input", { type: "text", inputmode: "decimal", placeholder: "g" }),
     carb: h("input", { type: "text", inputmode: "decimal", placeholder: "g" }),

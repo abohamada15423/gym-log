@@ -1,6 +1,6 @@
 // Gym Log Pro service worker: offline support, updates arrive when online.
-var CACHE="gymlog-v6";
-var SCRIPTS=["data","core","effects","logic","animation","timer","dialogs","train","muscles","body","meals","plan","app"];
+var CACHE="gymlog-v7";
+var SCRIPTS=["data","core","i18n","effects","logic","animation","timer","dialogs","train","muscles","body","meals","plan","app"];
 var SHELL=["./","index.html","css/app.css","manifest.webmanifest","icon-192.png","icon-512.png","apple-touch-icon.png"]
   .concat(SCRIPTS.map(function(n){return "js/"+n+".js";}));
 self.addEventListener("install",function(e){

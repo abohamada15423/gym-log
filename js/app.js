@@ -25,6 +25,7 @@ function render() {
 });
 
 load();
+applyLang();
 fx.enter = true;
 render();
 
