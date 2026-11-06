@@ -1190,6 +1190,24 @@
     .pr-row .v small { font-weight: 600 }
     .pr-row .new { color: var(--gold); font-size: .72rem; font-weight: 800; margin-left: 6px }
 
+    [hidden] { display: none !important }
+    .hpill { display: flex; align-items: stretch; gap: 0 }
+    .hpill.count { grid-column: 1 / -1 }
+    .hpill .qpill { flex: 1; min-width: 0; text-align: left }
+    .hpill .qpill + .hminus { border-left: 0 }
+    .hpill.count .qpill { border-top-right-radius: 0; border-bottom-right-radius: 0 }
+    .hminus { flex: none; width: 38px; border: 1px solid var(--line); border-radius: 0 14px 14px 0; background: var(--surface); color: var(--muted); font: 700 1.1rem var(--f-body); cursor: pointer }
+    .hed { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line) }
+    .hed:first-child { border-top: 0 }
+    .hed small { display: block; color: var(--muted); font-weight: 600 }
+    .hadd select { width: 100%; min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 .95rem var(--f-body); padding: 0 10px }
+
+    .mchips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px; scrollbar-width: none }
+    .mchips .btn { flex: none; width: auto; padding: 7px 12px; min-height: 0; font-size: .85rem }
+    .mchips .btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+    .more-m summary { cursor: pointer; font-weight: 700; font-size: .88rem; color: var(--accent); padding: 4px 0 }
+    .more-m .grid2 { margin-top: 8px }
+
     .toast-act {
       margin-left: 12px;
       background: none;
@@ -2816,6 +2834,18 @@
         }
         return null;
       }
+      // Habits: { id, name, icon, type: "check" | "count", target, step, unit }. Ticks live in state.habits[date][id].
+      var HABIT_DEFAULTS = [
+        { id: "creatine", name: "Creatine 5g", icon: "⚡", type: "check" },
+        { id: "water", name: "Water", icon: "💧", type: "count", target: 3.5, step: 0.5, unit: "L" }
+      ];
+      function habitList() { return Array.isArray(state.habitList) ? state.habitList : HABIT_DEFAULTS; }
+      function ownHabits() { if (!Array.isArray(state.habitList)) state.habitList = JSON.parse(JSON.stringify(HABIT_DEFAULTS)); return state.habitList; }
+      function habitDone(hb, v) { return hb.type === "count" ? (v || 0) >= hb.target : !!v; }
+      function habitWeek(hb) {
+        var n = 0; for (var i = 0; i < 7; i++) { var day = state.habits[ymdAdd(today(), -i)]; if (day && habitDone(hb, day[hb.id])) n++; }
+        return n;
+      }
       function sessionName(s) {
         if (s.dayName) return s.dayName;
         var d = DAYS.filter(function (x) { return x.id === s.day; })[0];
@@ -4029,24 +4059,31 @@
         lastPct = { day: dayId, pct: pct, vol: liveVol };
 
         // Daily Creatine + Water Quick Strip
-        var td = today(), hab = state.habits[td] || { creatine: false, water: 0 };
-        var cBtn = h("button", { class: "qpill" + (hab.creatine ? " on" : ""), type: "button" }, [
-          h("div", {}, [h("b", { text: "Creatine 5g" }), h("small", { text: hab.creatine ? "Taken today ✓" : "Tap to mark taken" })]),
-          h("span", { text: hab.creatine ? "✅" : "⚡" })
-        ]);
-        cBtn.onclick = function () {
-          hab.creatine = !hab.creatine; state.habits[td] = hab; save(); render();
-        };
-        var wBtn = h("button", { class: "qpill" + (hab.water >= 3.5 ? " on" : ""), type: "button" }, [
-          h("div", {}, [h("b", { text: "Water: " + hab.water.toFixed(1) + " / 3.5L" }), h("small", { text: "Tap +0.5L cup" })]),
-          h("span", { text: "💧" })
-        ]);
-        wBtn.onclick = function () {
-          hab.water = Math.round(((hab.water || 0) + 0.5) * 10) / 10;
-          if (hab.water > 5) hab.water = 0;
-          state.habits[td] = hab; save(); render();
-        };
-        var dailyHabits = h("div", { class: "qbar" }, [cBtn, wBtn]);
+        var td = today(), hab = state.habits[td] || {};
+        var dailyHabits = h("div", { class: "qbar" });
+        habitList().forEach(function (hb) {
+          var v = hab[hb.id], done = habitDone(hb, v), wk = habitWeek(hb) + "/7 days";
+          function setVal(nv) { hab[hb.id] = nv; state.habits[td] = hab; save(); rerenderKeepScroll(); }
+          if (hb.type === "count") {
+            var amt = v || 0;
+            var plus = h("button", { class: "qpill" + (done ? " on" : ""), type: "button", "aria-label": hb.name + ": " + mbFmt(amt) + " of " + mbFmt(hb.target) + " " + hb.unit + ". Add " + mbFmt(hb.step) }, [
+              h("div", {}, [h("b", { text: hb.name + ": " + mbFmt(amt) + " / " + mbFmt(hb.target) + (hb.unit || "") }), h("small", { text: "+" + mbFmt(hb.step) + (hb.unit || "") + " a tap · " + wk })]),
+              h("span", { text: done ? "✅" : hb.icon || "•" })
+            ]);
+            plus.onclick = function () { setVal(Math.round((amt + hb.step) * 100) / 100); };
+            var minus = h("button", { class: "hminus", type: "button", "aria-label": "Subtract " + mbFmt(hb.step) + " from " + hb.name, text: "−" });
+            minus.disabled = amt <= 0;
+            minus.onclick = function () { setVal(Math.max(0, Math.round((amt - hb.step) * 100) / 100)); };
+            dailyHabits.appendChild(h("div", { class: "hpill count" }, [plus, minus]));
+          } else {
+            var b = h("button", { class: "qpill" + (done ? " on" : ""), type: "button", "aria-pressed": String(done) }, [
+              h("div", {}, [h("b", { text: hb.name }), h("small", { text: (done ? "Done today ✓" : "Tap when done") + " · " + wk })]),
+              h("span", { text: done ? "✅" : hb.icon || "•" })
+            ]);
+            b.onclick = function () { setVal(!done); };
+            dailyHabits.appendChild(h("div", { class: "hpill" }, [b]));
+          }
+        });
 
         // Day selector chips
         var nx = nextDay();
@@ -5006,6 +5043,15 @@
         return card;
       }
 
+      // upGood: which direction counts as progress (weight and body fat depend on the goal).
+      var BODY_METRICS = [
+        { k: "kg", label: "Weight", unit: "kg" }, { k: "waist", label: "Waist", unit: "cm", upGood: false },
+        { k: "chest", label: "Chest", unit: "cm", upGood: true }, { k: "arm", label: "Arms", unit: "cm", upGood: true },
+        { k: "thigh", label: "Thighs", unit: "cm", upGood: true }, { k: "hips", label: "Hips", unit: "cm", upGood: false },
+        { k: "fat", label: "Body fat", unit: "%", upGood: false }
+      ];
+      var bodyMetric = "kg";
+
       function renderBody(root) {
         root.appendChild(h("h2", { text: "This Week" }));
         root.appendChild(renderWeekCard());
@@ -5033,39 +5079,65 @@
           tile("To Goal", !cur ? "–" : reached ? "Reached!" : toGoal + " " + (cutting ? "to lose" : "to gain"), reached || !cur ? "" : "kg")
         ]));
 
-        root.appendChild(h("h2", { text: "Weight Trend" }));
-        if (withKg.length < 2) {
-          root.appendChild(h("div", { class: "card empty", text: "Log at least two weigh-ins to see your trend." }));
-        } else {
-          root.appendChild(h("div", { class: "card" }, [
-            chartHead("Bodyweight", cur.kg, "kg", diff, !cutting),
-            lineChart(withKg.map(function (b) { return { d: b.date, y: b.kg }; }), { goal: G.kg, label: "Bodyweight from " + first.kg + " kg on " + first.date + " to " + cur.kg + " kg on " + cur.date + ", goal " + G.kg + " kg" })
-          ]));
+        root.appendChild(h("h2", { text: "Trends" }));
+        var have = BODY_METRICS.filter(function (m) { return sorted.some(function (b) { return b[m.k] != null; }); });
+        if (!have.some(function (m) { return m.k === bodyMetric; })) bodyMetric = "kg";
+        var M = BODY_METRICS.filter(function (m) { return m.k === bodyMetric; })[0];
+        var pts = sorted.filter(function (b) { return b[M.k] != null; });
+        var tcard = h("div", { class: "card" });
+        if (have.length > 1) {
+          var mch = h("div", { class: "mchips", role: "group", "aria-label": "Measurement to chart" });
+          have.forEach(function (m) {
+            var b = h("button", { class: "btn ghost", type: "button", "aria-pressed": String(m.k === bodyMetric), text: m.label });
+            b.onclick = function () { bodyMetric = m.k; rerenderKeepScroll(); };
+            mch.appendChild(b);
+          });
+          tcard.appendChild(mch);
         }
+        if (pts.length < 2) {
+          tcard.appendChild(h("div", { class: "empty", text: "Log at least two " + M.label.toLowerCase() + " entries to see your trend." }));
+        } else {
+          var p0 = pts[0], pN = pts[pts.length - 1], isKg = M.k === "kg";
+          tcard.appendChild(chartHead(M.label, pN[M.k], M.unit, pN[M.k] - p0[M.k], isKg ? !cutting : M.upGood));
+          tcard.appendChild(lineChart(pts.map(function (b) { return { d: b.date, y: b[M.k] }; }), {
+            goal: isKg ? G.kg : null, minSpan: M.unit === "kg" ? 1 : 0.5,
+            label: M.label + " from " + p0[M.k] + " " + M.unit + " on " + p0.date + " to " + pN[M.k] + " " + M.unit + " on " + pN.date + (isKg ? ", goal " + G.kg + " kg" : "")
+          }));
+        }
+        root.appendChild(tcard);
 
         root.appendChild(h("h2", { text: "Log Check-in" }));
-        var f = {
-          date: h("input", { type: "date", value: today() }),
-          kg: h("input", { type: "text", inputmode: "decimal", placeholder: "e.g. 88.5" }),
-          waist: h("input", { type: "text", inputmode: "decimal", placeholder: "cm" })
-        };
-        var add = h("button", { class: "btn", text: "Save Weight Entry" });
+        var f = { date: h("input", { type: "date", value: today() }) };
+        BODY_METRICS.forEach(function (m) {
+          f[m.k] = h("input", { type: "text", inputmode: "decimal", placeholder: m.k === "kg" ? "e.g. 88.5" : m.unit });
+        });
+        var add = h("button", { class: "btn", text: "Save Check-in" });
         add.onclick = function () {
-          var kg = num(f.kg.value), w = num(f.waist.value);
-          if (kg === null && w === null) { toast("Enter weight or waist"); return; }
-          state.body.push({ date: f.date.value || today(), kg: kg, waist: w, fat: null, note: "" });
-          save(); toast("Weight logged"); render();
+          var entry = { date: f.date.value || today(), note: "" }, any = false, bad = null;
+          BODY_METRICS.forEach(function (m) {
+            var v = num(f[m.k].value);
+            if (v !== null && (v <= 0 || (m.k === "fat" && v >= 70))) bad = bad || m.label;
+            entry[m.k] = v; if (v !== null) any = true;
+          });
+          if (bad) { toast("Check the " + bad.toLowerCase() + " value"); return; }
+          if (!any) { toast("Enter at least one measurement"); return; }
+          state.body.push(entry);
+          save(); toast("Check-in saved"); render();
         };
+        var lbl = function (m) { return h("label", {}, [m.label + " (" + m.unit + ")", f[m.k]]); };
+        var more = BODY_METRICS.slice(2).map(lbl), moreGrid = [];
+        for (var mi = 0; mi < more.length; mi += 2) moreGrid.push(h("div", { class: "grid2" }, more.slice(mi, mi + 2)));
         root.appendChild(h("div", { class: "card", style: "display:flex;flex-direction:column;gap:10px" }, [
           h("label", {}, ["Date", f.date]),
-          h("div", { class: "grid2" }, [h("label", {}, ["Weight (kg)", f.kg]), h("label", {}, ["Waist (cm)", f.waist])]),
+          h("div", { class: "grid2" }, [lbl(BODY_METRICS[0]), lbl(BODY_METRICS[1])]),
+          h("details", { class: "more-m" }, [h("summary", { text: "More measurements: chest, arms, thighs, hips, body fat" })].concat(moreGrid)),
           add
         ]));
 
         root.appendChild(h("h2", { text: "History" }));
         var list = h("div", { class: "card list" });
         sorted.slice().reverse().forEach(function (b) {
-          var parts = []; if (b.kg != null) parts.push(b.kg + " kg"); if (b.waist != null) parts.push(b.waist + " cm"); if (b.fat != null) parts.push(b.fat + "% fat");
+          var parts = BODY_METRICS.filter(function (m) { return b[m.k] != null; }).map(function (m) { return m.k === "kg" ? b.kg + " kg" : m.label + " " + b[m.k] + (m.unit === "%" ? "%" : " cm"); });
           var del = h("button", { class: "btn ghost sm", text: "Remove" });
           del.onclick = function () { removeWithUndo("body", b, "Check-in · " + b.date); };
           list.appendChild(h("div", { class: "item" }, [
@@ -5210,6 +5282,48 @@
             tile("Starting weight", startEntry ? String(startEntry.kg) : "–", startEntry ? "kg" : "")]),
           h("div", { class: "note", text: "Changes save straight away and update the Body and Meals tabs." })
         ]));
+
+        root.appendChild(h("h2", { text: "Daily Habits" }));
+        var hcard = h("div", { class: "card" });
+        habitList().forEach(function (hb) {
+          var del = h("button", { class: "btn ghost sm", type: "button", text: "Remove" });
+          del.onclick = function () { ownHabits(); removeWithUndo("habitList", state.habitList.filter(function (x) { return x.id === hb.id; })[0], hb.name); };
+          hcard.appendChild(h("div", { class: "hed" }, [
+            h("div", {}, [h("b", { text: (hb.icon ? hb.icon + " " : "") + hb.name }), h("small", { text: hb.type === "count" ? "Goal " + mbFmt(hb.target) + " " + (hb.unit || "") + " a day, " + mbFmt(hb.step) + " per tap" : "Yes / no each day" })]),
+            del
+          ]));
+        });
+        if (!habitList().length) hcard.appendChild(h("div", { class: "empty", text: "No habits. Add one below." }));
+        var hf = {
+          name: h("input", { type: "text", placeholder: "e.g. Stretch 10 min", style: "text-align:left" }),
+          icon: h("input", { type: "text", placeholder: "🧘", maxlength: "4" }),
+          type: h("select", {}, [h("option", { value: "check", text: "Yes / no" }), h("option", { value: "count", text: "Amount" })]),
+          target: h("input", { type: "text", inputmode: "decimal", placeholder: "e.g. 8" }),
+          step: h("input", { type: "text", inputmode: "decimal", placeholder: "1" }),
+          unit: h("input", { type: "text", placeholder: "e.g. hrs" })
+        };
+        var amountRow = h("div", { class: "grid2" }, [h("label", {}, ["Daily goal", hf.target]), h("label", {}, ["Per tap", hf.step]), h("label", {}, ["Unit", hf.unit])]);
+        amountRow.hidden = true;
+        hf.type.onchange = function () { amountRow.hidden = hf.type.value !== "count"; };
+        var hadd = h("button", { class: "btn", type: "button", text: "Add Habit" });
+        hadd.onclick = function () {
+          var nm = hf.name.value.trim();
+          if (!nm) { toast("Name the habit"); hf.name.focus(); return; }
+          var hb = { id: "h" + uid(), name: nm.slice(0, 40), icon: hf.icon.value.trim().slice(0, 4), type: hf.type.value };
+          if (hb.type === "count") {
+            var tg = num(hf.target.value), st = num(hf.step.value);
+            if (tg === null || tg <= 0) { toast("Enter a daily goal above 0"); hf.target.focus(); return; }
+            hb.target = tg; hb.step = st && st > 0 ? st : 1; hb.unit = hf.unit.value.trim().slice(0, 8);
+          }
+          ownHabits().push(hb); save(); rerenderKeepScroll(); toast(hb.name + " added to your daily habits");
+        };
+        hcard.appendChild(h("div", { class: "hadd", style: "display:flex;flex-direction:column;gap:10px;margin-top:10px;padding-top:12px;border-top:1px solid var(--line)" }, [
+          h("div", { class: "grid2" }, [h("label", {}, ["New habit", hf.name]), h("label", {}, ["Icon (optional)", hf.icon])]),
+          h("label", {}, ["Type", hf.type]),
+          amountRow,
+          hadd
+        ]));
+        root.appendChild(hcard);
 
         root.appendChild(h("h2", { text: "Alerts & Screen" }));
         function toggleRow(title, sub, on) {

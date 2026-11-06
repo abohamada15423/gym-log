@@ -349,3 +349,50 @@ test('body tab shows the week against last week, a training calendar with streak
   b.doc.querySelector('[aria-label="Previous month"]').click();
   assert.equal(b.doc.querySelector('[aria-label="Next month"]').disabled, false);
 });
+
+test('habits keep old data, can be added and removed on the Plan tab, and count toward their goal', t => {
+  const td = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  const a = app(t, { sessions: [], habits: { [td]: { creatine: true, water: 1.5 } } });
+  const pills = () => [...a.doc.querySelectorAll('.qbar .hpill')].map(p => p.textContent);
+  assert.match(pills()[0], /Creatine 5g.*Done today/);
+  assert.match(pills()[1], /Water: 1\.5 \/ 3\.5L/);
+  a.doc.querySelector('[aria-label^="Subtract 0.5 from Water"]').click();
+  assert.equal(a.state().habits[td].water, 1);
+  a.doc.getElementById('t-plan').click();
+  const lbl = text => [...a.doc.querySelectorAll('label')].find(l => l.textContent.startsWith(text));
+  lbl('New habit').querySelector('input').value = 'Sleep';
+  const type = lbl('Type').querySelector('select');
+  type.value = 'count'; type.dispatchEvent(new a.w.Event('change'));
+  lbl('Daily goal').querySelector('input').value = '8';
+  lbl('Unit').querySelector('input').value = 'h';
+  a.click('Add Habit');
+  assert.deepEqual(a.state().habitList.map(h => h.name), ['Creatine 5g', 'Water', 'Sleep']);
+  const removeCreatine = [...a.doc.querySelectorAll('.hed')].find(r => r.textContent.includes('Creatine')).querySelector('button');
+  removeCreatine.click();
+  assert.deepEqual(a.state().habitList.map(h => h.name), ['Water', 'Sleep']);
+  a.doc.getElementById('t-train').click();
+  for (let i = 0; i < 8; i++) a.doc.querySelector('[aria-label^="Sleep:"]').click();
+  assert.match(a.doc.querySelector('[aria-label^="Sleep:"]').textContent, /8 \/ 8h.*✅/);
+});
+
+test('check-ins take extra measurements and each one gets its own trend chart', t => {
+  const a = app(t, { sessions: [], body: [{ date: '2026-10-01', kg: 90, arm: 38 }] });
+  a.doc.getElementById('t-body').click();
+  const lbl = text => [...a.doc.querySelectorAll('label')].find(l => l.textContent.startsWith(text)).querySelector('input');
+  lbl('Date').value = '2026-10-15';
+  lbl('Weight').value = '89';
+  lbl('Arms').value = '38.5';
+  lbl('Body fat').value = '22';
+  a.click('Save Check-in');
+  assert.deepEqual(a.state().body.at(-1), { date: '2026-10-15', note: '', kg: 89, waist: null, chest: null, arm: 38.5, thigh: null, hips: null, fat: 22 });
+  const chips = [...a.doc.querySelectorAll('.mchips button')].map(b => b.textContent);
+  assert.deepEqual(chips, ['Weight', 'Arms', 'Body fat']);
+  a.click('Arms');
+  assert.match(a.doc.querySelector('.mchips').parentElement.querySelector('.chart-head').textContent, /Arms.*38\.5 cm.*\+0\.5 cm/);
+  assert.match(a.doc.querySelector('svg.chart').getAttribute('aria-label'), /^Arms from 38 cm/);
+  a.click('Body fat');
+  assert.match(a.doc.body.textContent, /Log at least two body fat entries/);
+  lbl('Body fat').value = '90';
+  a.click('Save Check-in');
+  assert.match(a.doc.getElementById('toast').textContent, /body fat/);
+});
