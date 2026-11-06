@@ -2271,3 +2271,68 @@ body { font-variant-numeric: tabular-nums }
     @keyframes sheet-up { from { transform: translateY(100%) } }
   }
 }
+
+/* ---------- Focus mode ---------- */
+.dock-row { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto; gap: 8px }
+.dock-row .continue-btn { grid-column: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.focus-btn { border: 0; border-radius: 9px; padding: 8px 14px; background: var(--ink); color: var(--bg); font: 700 .82rem var(--f-body); cursor: pointer }
+body.focusing { overflow: hidden }
+body.focusing .rest, body.focusing .session-dock, body.focusing .bar { visibility: hidden }
+.focus { position: fixed; inset: 0; z-index: 40; background: var(--bg); color: var(--ink); display: flex; flex-direction: column; overflow-y: auto;
+  padding: max(14px, env(safe-area-inset-top, 0px)) 16px calc(18px + env(safe-area-inset-bottom, 0px)) }
+.focus[hidden] { display: none }
+.f-top { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; max-width: 520px; width: 100%; margin: 0 auto }
+.f-exit { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 1.05rem; cursor: pointer }
+.f-prog small { display: block; font-weight: 700; font-size: .78rem; color: var(--muted); margin-bottom: 5px }
+.f-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden }
+.f-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .5s var(--ease-out) }
+.f-day { font: 800 .8rem var(--f-display); text-transform: uppercase; letter-spacing: .06em; color: var(--accent) }
+.f-body { flex: 1; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 12px; max-width: 520px; width: 100%; margin: 0 auto; padding: 16px 0 4px; text-align: center }
+.f-eyebrow { font-size: .78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em }
+.f-title { font: 800 clamp(2rem, 9vw, 2.8rem)/1 var(--f-display); text-transform: uppercase; margin: 0 }
+.f-sub { margin: 0; color: var(--muted); font-weight: 600 }
+.f-anim { display: grid; place-items: center; background: var(--soft); border-radius: 22px; padding: 6px; margin: 4px 0 }
+.f-anim canvas { max-width: 100% }
+.f-last { font-weight: 600; color: var(--muted) }
+.f-sug { align-self: center; background: var(--ok-soft); color: var(--ok); font-weight: 800; padding: 6px 12px; border-radius: 999px; font-size: .9rem }
+.f-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
+.f-field small { display: block; font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px }
+.f-stepper { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 5px }
+.f-stepper input { min-width: 0; border: 0; background: transparent; color: var(--ink); text-align: center; font: 800 1.9rem var(--f-display); padding: 6px 0; min-height: 0 }
+.f-stepper input:focus { outline: none }
+.f-stepper:focus-within { border-color: var(--accent) }
+.f-step { width: 44px; height: 52px; border: 0; border-radius: 13px; background: var(--surface-2); color: var(--ink); font: 700 1.5rem var(--f-body); cursor: pointer }
+.f-step:disabled, .f-stepper input:disabled { opacity: .45 }
+.f-main { min-height: 64px; font-size: 1.25rem; border-radius: 18px; margin-top: 4px }
+.f-nav { display: flex; justify-content: space-between }
+.f-link { border: 0; background: none; color: var(--muted); font: 700 .9rem var(--f-body); padding: 10px 4px; cursor: pointer }
+.f-link:disabled { opacity: .35; cursor: default }
+.f-actions { display: grid; gap: 10px }
+.f-done-icon { font-size: 4rem }
+
+.f-rest { display: grid; place-items: center }
+.f-dial { position: relative; width: min(72vw, 300px); aspect-ratio: 1 }
+.f-dial svg { width: 100%; height: 100%; transform: rotate(-90deg) }
+.f-ring-bg { fill: none; stroke: var(--line); stroke-width: 7 }
+.f-ring { fill: none; stroke: var(--accent); stroke-width: 7; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 0; transition: stroke-dashoffset .25s linear }
+.f-dial-txt { position: absolute; inset: 0; display: grid; place-content: center; text-align: center }
+.f-dial-txt small { font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted) }
+.f-time { font: 800 clamp(3.4rem, 17vw, 4.6rem)/1 var(--f-display); display: inline-block }
+.f-rest-btns { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px }
+.f-next { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 12px 14px; display: grid; gap: 2px }
+.f-next small { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--accent) }
+.f-next b { font-size: 1.15rem }
+.f-next span { color: var(--muted); font-weight: 600 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .focus:not([hidden]) { animation: f-in .35s var(--ease-out) }
+  .f-body > * { animation: rise .4s var(--ease-out) both }
+  .f-body > *:nth-child(2) { animation-delay: .04s } .f-body > *:nth-child(3) { animation-delay: .08s }
+  .f-body > *:nth-child(4) { animation-delay: .12s } .f-body > *:nth-child(n+5) { animation-delay: .16s }
+  .f-rest.soon .f-time { animation: beat 1s ease-in-out infinite }
+  .f-rest.soon .f-ring { stroke: var(--gold) }
+  .f-step:active, .f-exit:active { transform: scale(.92) }
+  .f-done-icon { animation: c-pop .6s var(--spring) both }
+  @keyframes f-in { from { opacity: 0; transform: scale(.98) } }
+}
+@media (max-height: 700px) { .f-anim { display: none } }

@@ -438,7 +438,9 @@ function renderTrain(root) {
       var target = $(nextExercise.id);
       target.focus({ preventScroll: true }); target.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
     };
-    dock.appendChild(continueBtn);
+    var focusBtn = h("button", { class: "focus-btn", type: "button", "aria-label": "Start focus mode" }, [h("span", { "aria-hidden": "true", text: "◎ " }), "Focus"]);
+    focusBtn.onclick = openFocus;
+    dock.appendChild(h("div", { class: "dock-row" }, [continueBtn, focusBtn]));
   }
   root.appendChild(dock);
   root.appendChild(h("h2", { text: "Daily habits" }));

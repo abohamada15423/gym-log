@@ -11,6 +11,7 @@ Run `python -m http.server 8000` from this directory and open http://localhost:8
 1. Choose your training day and session date.
 2. Enter weight and reps, or copy your previous workout. Use 0 kg for bodyweight sets.
 3. Check each completed set to start its rest timer. Use Continue to jump to the next unfinished exercise.
+   Or tap **◎ Focus** for a full-screen view of one set at a time: big − / + buttons for weight and reps, **Done** starts a rest countdown, and the next set comes up when rest ends. It edits the same workout, and ✕ or Escape returns to the normal view.
 4. Select Finish workout to review your session, then Save workout. Only checked sets are included. Keep training returns to the draft.
 
 ## Progress and goals
@@ -45,6 +46,7 @@ There is no build step. `index.html` holds the page markup, `css/app.css` the st
 | `js/timer.js` | Rest timer, sounds, notifications, wake lock |
 | `js/dialogs.js` | Plate calculator, backup, warm-up, history, day editor, program picker |
 | `js/train.js` · `js/body.js` · `js/meals.js` · `js/plan.js` | One file per tab (`js/muscles.js` holds the muscle map used on Body) |
+| `js/focus.js` | Focus mode: full-screen, one set at a time |
 | `js/app.js` | Rendering, tab switching, start-up and service worker registration |
 
 When you add a file to `js/`, add a `<script>` tag for it in `index.html` and its name to `SCRIPTS` in `sw.js`, so it works offline.

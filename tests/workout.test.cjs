@@ -435,3 +435,51 @@ test('Arabic switches the page to right-to-left and translates it, and English r
   assert.equal(a.doc.getElementById('t-train').textContent.trim(), 'Train');
   assert.ok(a.doc.body.textContent.includes('Your Goals'));
 });
+
+test('focus mode walks through sets one at a time, rests between them, and shares the draft', t => {
+  const four = (w, r) => [[w, r], [w, r], [w, r], [w, r]];
+  const a = app(t, { sessions: [{ id: '1', day: 'old', date: '2026-10-01', sets: { 'Bench press': four(80, 5) } }] });
+  const f = () => a.doc.getElementById('focus');
+  a.click('◎ Focus');
+  assert.equal(f().hidden, false);
+  assert.ok(a.doc.body.classList.contains('focusing'));
+  assert.equal(f().querySelector('.f-title').textContent, 'Bench press');
+  assert.match(f().querySelector('.f-sub').textContent, /Set 1 of 4/);
+  const [w, r] = f().querySelectorAll('.f-stepper input');
+  assert.equal(w.value, '80');            // last time's weight is shown...
+  assert.equal((a.state().drafts || {}).push, undefined); // ...but not written until you act
+  f().querySelector('[aria-label="More weight"]').click();
+  assert.equal(f().querySelector('.f-stepper input').value, '82.5');
+  a.click('Done ✓');
+  let d = a.state().drafts.push['Bench press'];
+  assert.deepEqual([d[0].w, d[0].r, d[0].done], ['82.5', '5', true]);
+  assert.ok(f().querySelector('.f-rest'));
+  assert.match(f().querySelector('.f-next').textContent, /Up next.*Bench press.*Set 2 of 4/);
+  a.click('Skip rest');
+  assert.match(f().querySelector('.f-sub').textContent, /Set 2 of 4/);
+  a.click('‹ Previous set');
+  a.click('Undo this set');
+  assert.equal(a.state().drafts.push['Bench press'][0].done, false);
+  a.doc.dispatchEvent(new a.w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(f().hidden, true);
+  assert.ok(!a.doc.body.classList.contains('focusing'));
+  assert.equal(a.doc.querySelector('.set input').value, '82.5');
+});
+
+test('focus mode ends on a summary that hands over to Finish workout', t => {
+  const a = app(t, { sessions: [] });
+  const d = a.w.eval('DAYS[0]');
+  d.ex = [d.ex[0]]; d.ex[0][1] = 1; // a one-set day
+  a.w.eval('render()');
+  a.click('◎ Focus');
+  const f = a.doc.getElementById('focus');
+  const [w, r] = f.querySelectorAll('.f-stepper input');
+  w.value = '60'; w.dispatchEvent(new a.w.Event('input'));
+  r.value = '8'; r.dispatchEvent(new a.w.Event('input'));
+  a.click('Done ✓');
+  assert.match(f.textContent, /All sets done.*1 sets · 480 kg volume/);
+  f.querySelector('.f-main').click(); // the dock's button sits hidden behind the overlay
+  assert.equal(f.hidden, true);
+  assert.equal(a.doc.getElementById('modal').hidden, false);
+  assert.match(a.doc.getElementById('mbox').textContent, /WORKOUT SUMMARY/);
+});

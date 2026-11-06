@@ -38,7 +38,8 @@ function holdScreen() {
   if (!state.keepAwake || !navigator.wakeLock || wake) return;
   try { navigator.wakeLock.request("screen").then(function (l) { wake = l; l.addEventListener("release", function () { wake = null; }); }).catch(function () { }); } catch (e) { }
 }
-function freeScreen() { if (wake) { try { wake.release(); } catch (e) { } wake = null; } }
+// Focus mode keeps the screen on for the whole workout, not just during rest.
+function freeScreen() { if (typeof focusActive !== "undefined" && focusActive) return; if (wake) { try { wake.release(); } catch (e) { } wake = null; } }
 function endRestUI() {
   clearTimeout(goT); $("rest").hidden = true; $("rest").classList.remove("go"); freeScreen();
 }
