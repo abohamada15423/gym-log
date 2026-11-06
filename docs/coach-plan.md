@@ -45,52 +45,101 @@
 
 ## ٤. قاعدة البيانات (Schema)
 
-All tables: `id uuid primary key default gen_random_uuid()`, `created_at timestamptz default now()`, `updated_at timestamptz default now()` (trigger), and on client-logged data `deleted_at timestamptz` (soft delete, needed for sync). SQL goes in `supabase/migrations/NNNN_name.sql`.
+### Conventions
+
+- **Record tables** (everything a client logs, plus programs, meal plans and comments) get:
+  `id uuid primary key` (created on the device with `crypto.randomUUID()`), `created_at timestamptz default now()`,
+  `updated_at timestamptz` (set by a trigger on every write, used only as the pull cursor),
+  `modified_at timestamptz` (set by the device when the user edits, used for last-write-wins), `deleted_at timestamptz` (soft delete).
+- **Exceptions, on purpose:**
+  - `profiles`: primary key `id = auth.users.id`.
+  - `client_settings`: one row **per setting**, primary key `(client_id, key)`, so settings edited on two devices don't overwrite each other.
+  - `coach_clients` and `coach_notes`: primary key `(coach_id, client_id)`.
+  - `invites`: primary key `code`.
+- SQL goes in `supabase/migrations/NNNN_name.sql`. Every `security definer` function has `set search_path = ''` and schema-qualified names (`public.x`, `auth.uid()`).
 
 ```text
 profiles            id = auth.users.id, role ('coach'|'client'), full_name, phone, lang ('en'|'ar'), avatar_path
-coach_clients       coach_id → profiles, client_id → profiles, status ('active'|'paused'|'archived'),
-                    started_at, coach_notes (private to coach)          unique(coach_id, client_id)
-invites             code (short, unique), coach_id, expires_at, used_by, used_at
+coach_clients       coach_id, client_id, status ('active'|'paused'|'archived'), started_at      pk(coach_id, client_id)
+coach_notes         coach_id, client_id, body, updated_at                    pk(coach_id, client_id)  -- coach-only, never in a table the client can read
+invites             code (pk, 10+ random base32 chars), coach_id, expires_at (default now() + 7 days), used_by, used_at
 
-programs            coach_id, client_id (NULL = template), name, days jsonb  -- same shape as DAYS in js/data.js
-                    active bool, starts_on date
-meal_plans          coach_id, client_id (NULL = template), name,
-                    targets jsonb {kcal, protein, carbs, fat}, meals jsonb [{name, items[], kcal, p, c, f}], active bool
+programs            id, coach_id, client_id (NULL = template), name, days jsonb  -- same shape as DAYS in js/data.js
+                    active bool, starts_on date, modified_at, updated_at, deleted_at
+meal_plans          id, coach_id, client_id (NULL = template), name, targets jsonb {kcal, protein, carbs, fat},
+                    meals jsonb [{name, items[], kcal, p, c, f}], active bool, modified_at, updated_at, deleted_at
 
-workout_sessions    client_id, date, day_id, day_name, program_id, sets jsonb {exercise: [[kg, reps], ...]},
-                    notes jsonb, note text, deleted_at
-food_logs           client_id, date, name, kcal, p, c, f, deleted_at
-body_checkins       client_id, date, kg, waist, chest, arm, thigh, hips, fat, photo_path, note, deleted_at
-habit_days          client_id, date, data jsonb                        unique(client_id, date)
-client_settings     client_id primary key, goals jsonb, habit_list jsonb, my_foods jsonb, custom_lib jsonb, baselines jsonb
+workout_sessions    id, client_id, date, day_id, day_name, program_id, sets jsonb {exercise: [[kg, reps], ...]},
+                    notes jsonb, note text, modified_at, updated_at, deleted_at
+food_logs           id, client_id, date, name, kcal, p, c, f, modified_at, updated_at, deleted_at
+body_checkins       id, client_id, date, kg, waist, chest, arm, thigh, hips, fat, photo_path, note, modified_at, updated_at, deleted_at
+habit_days          id, client_id, date, data jsonb, modified_at, updated_at, deleted_at        unique(client_id, date)
+client_settings     client_id, key ('goals'|'habit_list'|'my_foods'|'custom_lib'|'baselines'), value jsonb,
+                    modified_at, updated_at                                      pk(client_id, key)
 
-comments            client_id, author_id, target_type ('session'|'food_day'|'checkin'|'general'),
-                    target_ref text (session id or date), body, read_at
+comments            id, client_id, author_id, target_type ('session'|'food_day'|'checkin'|'general'),
+                    target_ref text (session id or date), body, read_at, created_at, updated_at, deleted_at
 ```
 
-Storage: private bucket `progress` with path `{client_id}/{yyyy-mm-dd}-{uuid}.webp`.
+Storage: private bucket `progress`, path `{client_id}/{yyyy-mm-dd}-{uuid}.webp`. **Never make it public**: these are body photos.
 
 ### الصلاحيات (RLS)
 
+RLS مفعّلة على **كل** جدول. الدوال المساعدة `security definer` وليها `search_path` ثابت:
+
 ```sql
--- helper: the logged-in user coaches this client (active link)
-create function is_coach_of(c uuid) returns boolean language sql stable security definer as $$
-  select exists (select 1 from coach_clients
+-- the logged-in user coaches this client (link not archived)
+create function public.is_coach_of(c uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.coach_clients
                  where coach_id = auth.uid() and client_id = c and status <> 'archived') $$;
+
+-- the logged-in user is a client of this coach
+create function public.is_client_of(co uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.coach_clients
+                 where client_id = auth.uid() and coach_id = co and status <> 'archived') $$;
 ```
 
-- `workout_sessions`, `food_logs`, `body_checkins`, `habit_days`, `client_settings`:
-  - الكلاينت يقرا ويكتب الصفوف بتاعته بس (`client_id = auth.uid()`).
-  - الكابتن **يقرا بس** صفوف الكلاينتس بتوعه (`is_coach_of(client_id)`).
-- `programs`, `meal_plans`:
-  - الكابتن يقرا ويكتب بتوعه (`coach_id = auth.uid()`).
-  - الكلاينت **يقرا بس** اللي متخصص ليه (`client_id = auth.uid()`).
-- `comments`: الكلاينت والكابتن بتاعه الاتنين يقروا ويكتبوا. `read_at` يتعلّم من الطرف التاني بس.
-- `coach_clients.coach_notes`: الكابتن بس يشوفها. ممكن view منفصلة أو نشيلها في جدول لوحدها.
-- `profiles`: كل واحد يشوف بروفايله، والكابتن يشوف بروفايلات كلاينتسه.
-- الدعوة تتقبل من خلال RPC `accept_invite(code)` (security definer)، اللي بيعمل صف في `coach_clients`.
-- **لازم** اختبارات للصلاحيات تتأكد إن كلاينت مش بيقدر يقرا بيانات كلاينت تاني، وإن كابتن مش بيشوف كلاينت مش بتاعه.
+- **بيانات الكلاينت** (`workout_sessions`, `food_logs`, `body_checkins`, `habit_days`, `client_settings`):
+  - الكلاينت يقرا ويكتب صفوفه بس: `client_id = auth.uid()` في select و insert و update و delete.
+  - الكابتن **يقرا بس**: `is_coach_of(client_id)` في select بس.
+- **`programs` و `meal_plans`:**
+  - الكابتن له كل الصلاحيات على `coach_id = auth.uid()`.
+  - الكلاينت **يقرا بس**: `client_id = auth.uid()`.
+- **`comments`:** كل واحد يكتب ويعدّل ويمسح **بتاعه بس**:
+  - select: `client_id = auth.uid() or is_coach_of(client_id)`.
+  - insert: `author_id = auth.uid() and (client_id = auth.uid() or is_coach_of(client_id))`.
+  - update و delete: `author_id = auth.uid()` بس. ومن ناحية الأعمدة: `revoke update on comments from authenticated; grant update (body, deleted_at) on comments to authenticated;`
+  - `read_at` مايتغيرش غير من RPC اسمها `mark_comments_read(client uuid)` (security definer). بتعلّم كـ "مقروء" بس التعليقات اللي `author_id <> auth.uid()`، وبس لو اللي بينادي طرف في المحادثة.
+- **`coach_clients`:** الكلاينت يقرا صفه (عشان يعرف مين الكابتن). الكابتن يقرا صفوف كلاينتسه ويغيّر `status`. الإضافة **بس** من خلال `accept_invite`.
+- **`coach_notes`:** الكابتن بس: `coach_id = auth.uid()` في كل العمليات. الكلاينت مالوش أي policy عليه.
+- **`profiles`:**
+  - كل واحد يقرا ويعدّل بروفايله.
+  - الكابتن يقرا بروفايلات كلاينتسه: `is_coach_of(id)`.
+  - الكلاينت يقرا بروفايل الكابتن بتاعه: `is_client_of(id)`. ده اللي بيخلّي اسم وصورة الكابتن يظهروا في الهيدر.
+  - `role` مايتغيرش من الواجهة. column grant يستثنيه، والكابتن يتعمل يدويًا أو بـ RPC للأدمن.
+- **`invites`:** الكابتن يعمل ويقرا ويمسح دعواته بس. مفيش select للكلاينتس، القبول بس من خلال الـ RPC.
+- **`accept_invite(code text)`** (security definer, `search_path = ''`):
+  1. يرفض لو اللي بينادي `role = 'coach'`.
+  2. يستخدم الكود **مرة واحدة** في خطوة واحدة:
+     `update public.invites set used_by = auth.uid(), used_at = now() where code = $1 and used_by is null and expires_at > now() returning coach_id`.
+  3. لو مفيش نتيجة: خطأ واحد «الكود غلط أو انتهى»، من غير تفرقة بين السببين عشان مايساعدش في التخمين.
+  4. يعمل upsert في `coach_clients` بـ `status = 'active'`.
+  5. الكود عشوائي ١٠ حروف أو أكتر (base32، أكتر من ٥٠ bit)، فالتخمين مش عملي.
+- **التخزين** (`storage.objects`، bucket `progress`):
+  ```sql
+  create policy "client manages own photos" on storage.objects for all to authenticated
+    using (bucket_id = 'progress' and (storage.foldername(name))[1] = auth.uid()::text)
+    with check (bucket_id = 'progress' and (storage.foldername(name))[1] = auth.uid()::text);
+  create policy "coach reads client photos" on storage.objects for select to authenticated
+    using (bucket_id = 'progress' and public.is_coach_of(((storage.foldername(name))[1])::uuid));
+  ```
+  الصور بتتعرض بـ signed URLs قصيرة العمر، مش لينكات عامة.
+- **لازم** اختبارات للصلاحيات تثبت إن:
+  - الكلاينت مش بيقرا بيانات كلاينت تاني، ولا `coach_notes`، ولا يعدّل تعليق الكابتن.
+  - الكابتن مش بيشوف كلاينت مش بتاعه، ولا صوره.
+  - الكود مايتقبلش مرتين ولا بعد ما ينتهي.
 
 ---
 
@@ -100,11 +149,15 @@ create function is_coach_of(c uuid) returns boolean language sql stable security
 
 - `localStorage` يفضل نسخة محلية زي ما هو، ونضيف له:
   - `outbox`: قائمة تغييرات مستنية ترفع (upsert/delete لكل record بـ uuid).
-  - `lastSync`: آخر وقت سحب لكل جدول.
+  - `cursor`: لكل جدول، أكبر `updated_at` اتسحب، **من السيرفر مش من ساعة الموبايل**.
 - أي record جديد ياخد `id` من نوع uuid من الموبايل (`crypto.randomUUID()`) بدل `uid()` الحالي.
 - **الرفع:** لما النت يرجع، أو الأبلكيشن يتفتح، أو بعد كل حفظ لو فيه نت، الـ outbox يترفع بالترتيب.
-- **السحب:** كل جدول يتسحب بـ `updated_at > lastSync`، ويدخل في الـ state المحلي.
-- **التعارض:** آخر تعديل يكسب (last-write-wins) حسب `updated_at`. والمسح soft delete عشان يوصل لكل الأجهزة.
+- **السحب:** كل جدول يتسحب بـ `updated_at > cursor - interval '5 minutes'` (هامش تداخل)، والدمج بالـ `id` فالتكرار مالوش ضرر.
+  الهامش ضروري: `updated_at` بيتحدد وقت **بداية** العملية في السيرفر، وممكن صف يتحفظ متأخر بقيمة أقدم من آخر cursor، ومن غير هامش مش هيتسحب أبدًا.
+- **التعارض:** آخر تعديل يكسب (last-write-wins) حسب **`modified_at`**، وهو وقت التعديل على الجهاز، **مش** `updated_at` اللي هو وقت الرفع. كده تعديل اتعمل أوفلاين امبارح واترفع النهارده مايمسحش تعديل أحدث منه.
+  الرفع بيبقى `upsert ... where excluded.modified_at > existing.modified_at` (RPC أو trigger)، والسحب بيدمج بنفس القاعدة.
+- **الإعدادات** (الأهداف، العادات، أطعمتي…) بتتزامن **إعداد إعداد** (صف لكل `key` في `client_settings`)، فتعديل الأهداف على جهاز وإضافة أكلة على جهاز تاني مايمسحوش بعض.
+- **المسح:** soft delete (`deleted_at`) عشان يوصل لكل الأجهزة.
 - البرنامج ونظام الأكل من الكابتن بيتسحبوا ويبانوا كـ program اسمه «برنامج الكابتن» (`programId: "coach"`)، وأهداف الأكل بتيجي من `meal_plans.targets`.
 - مؤشر حالة في الهيدر بدل «Saved ✓»: «اتحفظ أونلاين» / «أوفلاين، هيترفع لما النت يرجع».
 - **أول تسجيل دخول:** نعرض «عندك X تمرين على الموبايل، ترفعهم لحسابك؟» ونرفع البيانات القديمة مرة واحدة.
@@ -215,7 +268,7 @@ create function is_coach_of(c uuid) returns boolean language sql stable security
 
 **مرحلة ١: الحسابات والمزامنة**
 ```
-اقرا docs/coach-plan.md. نفّذ المرحلة ١ (الأقسام ٥ و٦ بنود ١-٢ و٧ في الإعدادات):
+اقرا docs/coach-plan.md. نفّذ المرحلة ١: القسم ٥ كله، ومن القسم ٦ البنود ١ و٢ و٧ بس (مش القسم ٧ بتاع الكابتن):
 تسجيل دخول بإيميل OTP، js/sync.js مع outbox وأوفلاين، رفع البيانات المحلية أول مرة،
 ومؤشر المزامنة. خلّي npm test أخضر، اختبر في المتصفح بالعربي والإنجليزي، وافتح PR.
 ```
@@ -249,3 +302,4 @@ Web Push بـ Edge Function، وتذكير بأيام التمرين. افتح P
 | 2026-11-06 | نبدأ بكابتن واحد، وقاعدة البيانات جاهزة لأكتر من كابتن |
 | 2026-11-06 | Supabase للباك إند، والواجهة تفضل JavaScript عادي على GitHub Pages |
 | 2026-11-06 | تسجيل الدخول بالإيميل (OTP) في الأول |
+| 2026-11-06 | مراجعة الخطة: تعليقات كل واحد يعدّل بتاعه بس، صلاحيات للتخزين، سحب بهامش تداخل والتعارض بـ `modified_at`، `search_path` ثابت، ملاحظات الكابتن في جدول لوحده، الإعدادات صف لكل إعداد، وكود دعوة يتستخدم مرة واحدة |
