@@ -1,8 +1,13 @@
 // Gym Log Pro service worker: offline support, updates arrive when online.
-var CACHE="gymlog-v4";
-var SHELL=["./","index.html","manifest.webmanifest","icon-192.png","icon-512.png","apple-touch-icon.png"];
+var CACHE="gymlog-v8";
+var SCRIPTS=["data","core","i18n","effects","logic","animation","timer","dialogs","train","muscles","body","meals","plan","focus","app"];
+var SHELL=["./","index.html","css/app.css","manifest.webmanifest","icon-192.png","icon-512.png","apple-touch-icon.png"]
+  .concat(SCRIPTS.map(function(n){return "js/"+n+".js";}));
 self.addEventListener("install",function(e){
-  e.waitUntil(caches.open(CACHE).then(function(c){return c.addAll(SHELL);}).then(function(){return self.skipWaiting();}));
+  // Cache each file on its own: one missing file must not stop the worker installing.
+  e.waitUntil(caches.open(CACHE).then(function(c){
+    return Promise.all(SHELL.map(function(u){return c.add(u).catch(function(){});}));
+  }).then(function(){return self.skipWaiting();}));
 });
 self.addEventListener("activate",function(e){
   e.waitUntil(caches.keys().then(function(ks){
@@ -23,7 +28,15 @@ self.addEventListener("fetch",function(e){
     }).catch(function(){return caches.match("index.html").then(function(m){return m||caches.match("./");});}));
     return;
   }
-  // everything else (icons, fonts): cache first, then network and remember it
+  if(sameOrigin){
+    // the app's own scripts and styles: network first too, so a new page never runs old code
+    e.respondWith(fetch(req).then(function(r){
+      if(r&&r.ok){var copy=r.clone();caches.open(CACHE).then(function(c){c.put(req,copy);});}
+      return r;
+    }).catch(function(){return caches.match(req,{ignoreSearch:true});}));
+    return;
+  }
+  // everything else (fonts): cache first, then network and remember it
   e.respondWith(caches.match(req).then(function(hit){
     if(hit)return hit;
     return fetch(req).then(function(r){
