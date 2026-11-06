@@ -8,14 +8,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Gym Log">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#080D1A">
+  <meta name="theme-color" content="#0b0b0d">
   <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <title>Gym Log Pro</title>
   <link rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="css/app.css">
 </head>
 
@@ -23,10 +23,9 @@
 
   <div class="app">
     <div class="top">
-      <div class="brand">Gym Log <span class="brand-badge">PRO</span></div>
+      <div class="hello"><small id="today-lbl"></small><h1 id="page-title">Let's train</h1></div>
       <div class="top-r">
-        <div class="status" id="status">Ready</div>
-        <button class="icon-btn" id="theme-btn" title="Toggle Dark/Light Mode">◐</button>
+        <div class="status" id="status" aria-live="polite"></div>
       </div>
     </div>
     <main class="view" id="view"></main>
@@ -53,9 +52,8 @@
           <path d="M6 7v10M3 9.5v5M18 7v10M21 9.5v5M6 12h12" />
         </svg></span>Train</button>
     <button class="nb" role="tab" id="t-body" aria-selected="false"><span class="gl"><svg viewBox="0 0 24 24">
-          <circle cx="12" cy="5.5" r="2.3" />
-          <path d="M12 8.5v6M7.5 11.5h9M9 21l3-6.5L15 21" />
-        </svg></span>Body</button>
+          <path d="M4 19V10M10 19V5M16 19v-7M22 19H2" />
+        </svg></span>Progress</button>
     <button class="nb" role="tab" id="t-meals" aria-selected="false"><span class="gl"><svg viewBox="0 0 24 24">
           <path d="M7 3v7M5 3v4.5a2 2 0 004 0V3M7 10v11M17 3c-2.2 1.8-3 4.6-3 7.5h3V21" />
         </svg></span>Meals</button>

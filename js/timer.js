@@ -42,6 +42,7 @@ function holdScreen() {
 function freeScreen() { if (typeof focusActive !== "undefined" && focusActive) return; if (wake) { try { wake.release(); } catch (e) { } wake = null; } }
 function endRestUI() {
   clearTimeout(goT); $("rest").hidden = true; $("rest").classList.remove("go"); freeScreen();
+  if (typeof dockRest === "function") dockRest();
 }
 function startRest(sec, name) {
   clearTimeout(goT);
@@ -55,9 +56,11 @@ function tickRest() {
   var left = Math.max(0, Math.ceil((rest.end - Date.now()) / 1000));
   $("rtime").textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
   $("rest").classList.toggle("soon", left > 0 && left <= 5);
+  if (typeof dockRest === "function") dockRest();
   $("rest").style.setProperty("--p", String(Math.min(100, Math.max(0, (1 - (rest.end - Date.now()) / (rest.total * 1000)) * 100)).toFixed(1)));
   if (left <= 0) {
     clearInterval(rest.iv); rest.iv = null; $("rlabel").textContent = "GO!"; $("rest").classList.remove("soon"); $("rest").classList.add("go");
+    if (typeof dockRest === "function") dockRest();
     beep(); try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) { }
     if (document.hidden && notifyOK()) showNotif("Rest over — GO! 💪", rest.name ? ("Next set: " + rest.name) : "Time for your next set");
     freeScreen();

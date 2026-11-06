@@ -23,9 +23,7 @@ function adopt(s) {
   if (!state.goals || typeof state.goals !== "object") state.goals = {};
 }
 function applyLoaded() {
-  if (state.theme) document.documentElement.setAttribute("data-theme", state.theme);
-  else document.documentElement.removeAttribute("data-theme");
-  themeIcon();
+  document.documentElement.setAttribute("data-theme", "dark");
   applyProgram();
   dayId = nextDay();
   expandedExercise = null;
@@ -75,24 +73,8 @@ function save() {
 }
 
 /* ---------- THEME ---------- */
-function isDark() {
-  var de = document.documentElement.getAttribute("data-theme");
-  return de === "dark" || (!de && !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches));
-}
-// Moon in light mode, sun in dark mode: the icon shows what a tap switches to.
-function themeIcon() {
-  var b = $("theme-btn"), dark = isDark();
-  b.innerHTML = dark
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>'
-    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg>';
-  b.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
-  b.removeAttribute("title");
-}
-$("theme-btn").onclick = function () {
-  var next = isDark() ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme", next);
-  state.theme = next; save(); themeIcon();
-};
+// The design is dark-only. isDark() stays for the animation palette.
+function isDark() { return true; }
 
 /* ---------- LAST LIFTED MEMORY ENGINE ---------- */
 // Searches all previous sessions (or user-defined baseline) for the most recent time this specific exercise was logged
@@ -209,4 +191,25 @@ function nextDay() {
     }
   }
   return ids[0];
+}
+
+// Simple line icon for an exercise list row, picked from its muscle label.
+var EX_ICONS = {
+  chest: '<path d="M3 16h18M7 16v3M17 16v3M5 10h14M5 8v4M19 8v4"/><circle cx="12" cy="6" r="1.6"/>',
+  back: '<path d="M4 4h16M8 4v3.5a4 4 0 008 0V4M12 11.5V20M9 20h6"/>',
+  shoulders: '<path d="M3 4h18M5 2.5v3M19 2.5v3M8 4l2.5 6.5M16 4l-2.5 6.5M12 10.5V16M12 16l-3 5M12 16l3 5"/><circle cx="12" cy="8.3" r="1.6"/>',
+  arms: '<path d="M6 9v6M3 10.5v3M18 9v6M21 10.5v3M6 12h12"/>',
+  legs: '<path d="M9 3h6M12 3v6l-4 5v7M12 9l4 5v7M6 21h4M14 21h4"/>',
+  core: '<rect x="7" y="4" width="10" height="16" rx="3"/><path d="M12 4v16M7 9.3h10M7 14.6h10"/>',
+  cardio: '<path d="M3 12h4l2-5 4 10 2-5h6"/>'
+};
+function exIcon(muscle) {
+  var m = String(muscle || "").toLowerCase(), k = "arms";
+  if (/cardio/.test(m)) k = "cardio";
+  else if (/chest|pec/.test(m)) k = "chest";
+  else if (/back|lat|trap/.test(m)) k = "back";
+  else if (/shoulder|delt/.test(m)) k = "shoulders";
+  else if (/leg|quad|ham|glute|calf|calves|adductor/.test(m)) k = "legs";
+  else if (/core|abs|oblique/.test(m)) k = "core";
+  return '<svg viewBox="0 0 24 24" aria-hidden="true">' + EX_ICONS[k] + '</svg>';
 }

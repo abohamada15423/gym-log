@@ -2,6 +2,10 @@
 
 A mobile workout, body measurement, and meal tracker. Workout history and drafts are stored in this browser's local storage. Export backups from the Plan tab to move data between devices.
 
+## Design
+
+The app uses one dark "athletic" look: near-black background, graphite cards and a lime accent. All colours are tokens at the top of `css/app.css`. The design is dark only, so there is no light/dark switch.
+
 ## Preview
 
 Run `python -m http.server 8000` from this directory and open http://localhost:8000.

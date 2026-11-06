@@ -20,6 +20,9 @@ function render() {
     $("t-" + t).setAttribute("aria-selected", String(t === tab));
   });
   var root = $("view"); root.textContent = "";
+  document.body.setAttribute("data-tab", tab);
+  $("page-title").textContent = { train: "Let's train", body: "Progress", meals: "Meals", plan: "Your plan" }[tab];
+  $("today-lbl").textContent = mbDay(today());
   if (tab === "train") renderTrain(root);
   else if (tab === "body") renderBody(root);
   else if (tab === "meals") renderMeals(root);

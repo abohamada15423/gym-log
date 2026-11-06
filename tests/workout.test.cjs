@@ -59,13 +59,13 @@ test('finish reviews checked sets only; cancel keeps draft; save clears draft an
   a.input(rows[1].querySelectorAll('input')[0], '70');
   a.input(rows[1].querySelectorAll('input')[1], '5');
   rows[0].querySelector('.chk').click();
-  a.click('Finish workout');
+  a.click('Finish');
   assert.match(a.doc.getElementById('mbox').textContent, /1 of 20 sets/);
   assert.equal(a.state().sessions.length, 0);
   a.click('Keep training');
   assert.equal(a.doc.getElementById('modal').hidden, true);
   assert.equal(a.state().drafts.push['Bench press'][1].w, '70');
-  a.click('Finish workout');
+  a.click('Finish');
   a.click('Save workout');
   assert.deepEqual(a.state().sessions[0].sets, { 'Bench press': [[60, 6]] });
   assert.equal(a.state().sessions[0].date, '2026-10-20');
@@ -108,11 +108,11 @@ test('workout summary supports keyboard cancellation and returns focus', t => {
   a.input(row.querySelectorAll('input')[1], '6');
   row.querySelector('.chk').click();
   assert.equal(a.doc.activeElement.getAttribute('aria-pressed'), 'true');
-  a.click('Finish workout');
+  a.click('Finish');
   assert.equal(a.doc.activeElement.textContent, 'Keep training');
   a.doc.getElementById('modal').dispatchEvent(new a.w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.equal(a.doc.getElementById('modal').hidden, true);
-  assert.equal(a.doc.activeElement.textContent, 'Finish workout');
+  assert.equal(a.doc.activeElement.textContent, 'Finish');
   assert.equal(a.state().sessions.length, 0);
 });
 
@@ -302,7 +302,7 @@ test('sets can be added or removed for today only, and notes are saved with the 
   assert.match(a.doc.getElementById('toast').textContent, /Undo the last set/);
   const note = card().querySelector('.ex-note textarea');
   note.value = 'Narrow grip'; note.dispatchEvent(new a.w.Event('input'));
-  a.click('Finish workout');
+  a.click('Finish');
   const sn = a.doc.querySelector('#mbox .sess-note');
   sn.value = 'Slept badly'; sn.dispatchEvent(new a.w.Event('input'));
   a.click('Save workout');
@@ -426,7 +426,7 @@ test('Arabic switches the page to right-to-left and translates it, and English r
   const again = app(t, a.state());
   await tick();
   assert.equal(again.doc.documentElement.getAttribute('lang'), 'ar');
-  assert.equal(again.doc.querySelector('.session-dock .btn').textContent, 'إنهاء التمرين');
+  assert.equal(again.doc.querySelector('.session-dock .btn').textContent, 'إنهاء');
   // back to English without reloading
   a.doc.getElementById('t-plan').click();
   a.click('English');

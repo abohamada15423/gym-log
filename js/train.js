@@ -19,19 +19,19 @@ function renderTrain(root) {
 
   pct = totalSets ? Math.round(doneSets / totalSets * 100) : 0;
   var volB = h("b", { text: "0" });
-  var hero = h("section", { class: "card hero" }, [
-    h("div", { class: "hero-row" }, [
-      h("div", {}, [
-        h("div", { class: "eyebrow", text: progName() + " / " + d.tag }),
-        h("div", { class: "hero-title", text: d.name }),
-        h("div", { class: "hero-meta", text: d.ex.length + " exercises · " + totalSets + " working sets" })
-      ])
+  // rough session length: each set plus its rest, plus a little setup time
+  var mins = Math.max(5, Math.round(d.ex.reduce(function (a, e) { return a + setsFor(d, e) * ((e[4] || 90) + 45); }, 0) / 60 / 5) * 5);
+  var streak = weekStreak();
+  var hero = h("section", { class: "hero" }, [
+    h("div", { class: "hero-tag", text: "Today · " + d.tag + " of " + DAYS.length }),
+    h("h2", { class: "hero-title", text: d.name }),
+    h("p", { class: "hero-meta", text: d.ex.length + " exercises · " + totalSets + " sets · ~" + mins + " min" }),
+    h("div", { class: "hero-stats" }, [
+      h("div", {}, [h("b", { text: doneSets + " / " + totalSets }), h("small", { text: "sets done" })]),
+      h("div", {}, [volB, h("small", { text: "kg volume" })]),
+      h("div", {}, [h("b", { text: (streak ? "🔥 " : "") + streak }), h("small", { text: "week streak" })])
     ]),
-    h("div", { class: "hero-footer" }, [
-      h("div", { class: "hero-ring", style: "--progress:" + pct, role: "img", "aria-label": pct + "% complete" }, [h("div", { class: "hero-ring-inner", text: pct + "%" })]),
-      h("div", { class: "hero-progress-text" }, [h("b", { text: doneSets + " / " + totalSets + " sets" }), "Session progress"]),
-      h("div", { class: "wk-txt" }, [volB, h("span", { text: "kg volume" })])
-    ])
+    h("div", { class: "hero-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(pct), "aria-label": pct + "% complete" }, [h("i", { style: "width:" + pct + "%" })])
   ]);
   root.appendChild(hero);
   if (backupDue()) root.appendChild(backupNag());
@@ -70,7 +70,6 @@ function renderTrain(root) {
   var chips = h("div", { class: "chips-row" }, DAYS.map(function (x) {
     var hasDr = state.drafts[dk(x.id)] && Object.keys(state.drafts[dk(x.id)]).length > 0;
     var b = h("button", { class: "day", "aria-pressed": String(x.id === dayId) }, [
-      h("small", { text: x.tag }),
       h("b", { text: x.name }),
       x.id === nx ? h("span", { class: "nx", title: "Up next" }) : null,
       hasDr ? h("span", { class: "dr", title: "Saved draft" }) : null
@@ -78,7 +77,6 @@ function renderTrain(root) {
     b.onclick = function () { dayId = x.id; expandedExercise = null; fx.enter = true; render(); };
     return b;
   }));
-  root.appendChild(h("div", { class: "section-label" }, [h("span", { text: "Your training split" }), h("span", { text: "Swipe to switch →" })]));
   root.appendChild(chips);
 
   // Program name + customize / change system
@@ -92,7 +90,7 @@ function renderTrain(root) {
     state.sessionDates = sessionDates; save();
   };
   root.appendChild(h("details", { class: "workout-settings" }, [h("summary", { text: "Workout settings · date & program" }), h("div", { class: "workout-tools" }, [h("label", {}, ["Session date", dateIn]), editDayBtn, sysBtn])]));
-  root.appendChild(h("div", { class: "workout-heading" }, [h("div", {}, [h("h2", { text: "Your exercises" }), h("p", { text: "Enter your weight and reps, then check off each set." })])]));
+  root.appendChild(h("h2", { class: "sec-title", text: "Exercises" }));
   var nextExercise = null;
   var firstUnfinished = d.ex.findIndex(function (exercise) { var n = setsFor(d, exercise); return (draft[exercise[0]] || []).slice(0, n).filter(function (s) { return s && s.done; }).length < n; });
 
@@ -124,9 +122,7 @@ function renderTrain(root) {
       var scroll = window.scrollY; render(); window.scrollTo(0, scroll);
       $(cardId).querySelector(".exercise-toggle").focus({ preventScroll: true });
     };
-    var canvas = h("canvas", {});
-    var icoBox = h("div", { class: "ico", title: "Tap for HD Form & Plate Calculator" }, [canvas]);
-    drawBiomechanicalExercise(canvas, name, 1);
+    var icoBox = h("button", { class: "ico", type: "button", "aria-label": "Form and plate calculator for " + name, html: exIcon(muscle) });
     icoBox.onclick = function () {
       var topW = hist.pr ? hist.pr[0] : 60;
       openPlateModal(name, topW, parseInt(repsTarget, 10) || 8);
@@ -147,21 +143,19 @@ function renderTrain(root) {
       toast("Filled last weights for " + name);
     };
 
+    var lastTxt = lastSets.length ? "last " + mbFmt(lastSets[0][0]) + " × " + lastSets[0][1] : "";
     var sub = h("div", { class: "ex-sub" }, [
       h("span", { class: "pill", text: setsCount + " × " + repsTarget }),
-      h("span", { class: "pill muscle", text: muscle }),
-      hist.pr ? h("span", { class: "pill gold", text: "PR: " + hist.pr[0] + "kg × " + hist.pr[1] }) : null
+      hist.pr ? h("span", { class: "pill gold", text: "PR: " + hist.pr[0] + "kg × " + hist.pr[1] }) : null,
+      h("span", { class: "ex-count" + (completedCount === setsCount ? " complete" : ""), text: completedCount === setsCount ? "✓ Exercise complete" : completedCount + " of " + setsCount + " sets complete" })
     ]);
 
     var head = h("div", { class: "ex-head" }, [
-      h("span", { class: "ex-number", text: String(exerciseIndex + 1).padStart(2, "0") }),
       icoBox,
       h("div", { class: "ex-meta" }, [
-        h("div", { class: "ex-toprow" }, [
-          h("div", { class: "ex-name", text: name, onclick: icoBox.onclick })
-        ]),
-        sub,
-        h("span", { class: "ex-count" + (completedCount === setsCount ? " complete" : ""), text: completedCount === setsCount ? "✓ Exercise complete" : completedCount + " of " + setsCount + " sets complete" })
+        h("div", { class: "ex-name", text: name, onclick: icoBox.onclick }),
+        h("div", { class: "ex-muscle", text: muscle + (lastTxt ? " · " + lastTxt : "") }),
+        sub
       ]), expandBtn
     ]);
     card.appendChild(head);
@@ -238,11 +232,10 @@ function renderTrain(root) {
     /* --- SETS TABLE --- */
     var grid = h("div", { class: "sets" }, [
       h("div", { class: "cols" }, [
-        h("span", { text: "#" }),
+        h("span", { text: "SET" }),
         h("span", { text: "KG" }),
         h("span", { text: "REPS" }),
-        h("span", { text: "LAST / Δ" }),
-        h("span", { text: "✓" })
+        h("span", { text: "" })
       ])
     ]);
 
@@ -315,9 +308,8 @@ function renderTrain(root) {
         };
 
         row.appendChild(h("span", { class: "n", text: String(s + 1) }));
-        row.appendChild(wIn);
-        row.appendChild(rIn);
-        row.appendChild(infoCell);
+        row.appendChild(h("label", { class: "fld" }, [wIn, h("small", { text: "kg" })]));
+        row.appendChild(h("label", { class: "fld" }, [rIn, h("small", { text: "reps" })]));
         row.appendChild(chk);
         grid.appendChild(row);
       })(s);
@@ -365,7 +357,7 @@ function renderTrain(root) {
   });
 
   // Save Session Button
-  var saveBtn = h("button", { class: "btn", text: "Finish workout", type: "button" });
+  var saveBtn = h("button", { class: "btn dock-finish", text: "Finish", type: "button" });
   saveBtn.disabled = doneSets === 0;
   saveBtn.onclick = function () {
     var sess = { id: uid(), date: dateIn.value || today(), day: d.id, dayName: d.name, prog: state.programId, sets: {} }, any = false;
@@ -427,22 +419,31 @@ function renderTrain(root) {
     $("modal").hidden = false;
     keepGoing.focus();
   };
-  var dock = h("div", { class: "session-dock", "aria-label": "Workout actions" }, [
-    h("div", {}, [h("strong", { text: doneSets + " / " + totalSets + " sets" }), h("small", { text: doneSets ? "Your progress is saved on this device" : "Ready when you are" })]), saveBtn
-  ]);
+  // Workout bar: what's next (tap to jump there), progress or rest countdown, Finish and Focus.
+  var idleSub = doneSets + " / " + totalSets + " sets done";
+  var subEl = h("small", { class: "dock-sub", text: idleSub });
+  subEl.setAttribute("data-idle", idleSub);
+  var info;
   if (nextExercise) {
-    var continueBtn = h("button", { class: "continue-btn", type: "button", text: "Continue: " + nextExercise.name + " →" });
-    continueBtn.onclick = function () {
+    info = h("button", { class: "dock-info continue-btn", type: "button", "aria-label": "Go to " + nextExercise.name }, [h("b", { text: "Set " + nextExercise.set + " · " + nextExercise.name }), subEl]);
+    info.onclick = function () {
       expandedExercise = nextExercise.name;
       render();
       var target = $(nextExercise.id);
       target.focus({ preventScroll: true }); target.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "start" });
     };
+  } else info = h("div", { class: "dock-info" }, [h("b", { text: d.ex.length ? "All sets done 💪" : d.name }), subEl]);
+  var skipR = h("button", { class: "dock-rest", type: "button", text: "Skip" });
+  skipR.onclick = function () { $("rskip").click(); dockRest(); };
+  var actions = h("div", { class: "dock-actions" }, [skipR, saveBtn]);
+  if (nextExercise) {
     var focusBtn = h("button", { class: "focus-btn", type: "button", "aria-label": "Start focus mode" }, [h("span", { "aria-hidden": "true", text: "◎ " }), "Focus"]);
     focusBtn.onclick = openFocus;
-    dock.appendChild(h("div", { class: "dock-row" }, [continueBtn, focusBtn]));
+    actions.appendChild(focusBtn);
   }
+  var dock = h("div", { class: "session-dock", role: "region", "aria-label": "Workout actions" }, [info, actions]);
   root.appendChild(dock);
+  dockRest();
   root.appendChild(h("h2", { text: "Daily habits" }));
   root.appendChild(dailyHabits);
 
@@ -467,4 +468,16 @@ function renderTrain(root) {
     list.appendChild(allBtn);
   }
   root.appendChild(list);
+}
+
+// Show the rest countdown in the workout bar (the floating timer is hidden on the Train tab).
+function dockRest() {
+  var dock = document.querySelector(".session-dock"); if (!dock) return;
+  var on = !!rest.iv, sub = dock.querySelector(".dock-sub");
+  dock.classList.toggle("resting", on);
+  if (!sub) return;
+  if (on) {
+    var left = Math.max(0, Math.ceil((rest.end - Date.now()) / 1000));
+    sub.textContent = "Rest " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") + " left";
+  } else sub.textContent = sub.getAttribute("data-idle");
 }
