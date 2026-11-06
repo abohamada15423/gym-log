@@ -24,6 +24,24 @@ Run `python -m http.server 8000` from this directory and open http://localhost:8
 - Custom foods can include carbs and fat. Leave calories blank to calculate them from the macros, and tick "Save to My Foods" to reuse the food with one tap.
 - Once you have 3 or more workouts, the Train tab reminds you to back up if you haven't, or if it has been 14+ days and you've logged new workouts. On phones that support it, Back up opens the share sheet so you can save the file to Files or send it.
 
+## Code layout
+
+There is no build step. `index.html` holds the page markup, `css/app.css` the styles, and `js/` the app as plain scripts that share one global scope. They load in this order, and later files can use anything defined in earlier ones:
+
+| File | What it holds |
+|---|---|
+| `js/data.js` | Built-in programs, exercise library, training systems, food presets |
+| `js/core.js` | App state, the `h()` DOM helper, date and number helpers, toast |
+| `js/effects.js` | Undo, SVG charts, count-up numbers, confetti |
+| `js/logic.js` | Storage, programs, theme, exercise history, suggestions, warm-ups, habits |
+| `js/animation.js` | Canvas exercise animations |
+| `js/timer.js` | Rest timer, sounds, notifications, wake lock |
+| `js/dialogs.js` | Plate calculator, backup, warm-up, history, day editor, program picker |
+| `js/train.js` · `js/body.js` · `js/meals.js` · `js/plan.js` | One file per tab (`js/muscles.js` holds the muscle map used on Body) |
+| `js/app.js` | Rendering, tab switching, start-up and service worker registration |
+
+When you add a file to `js/`, add a `<script>` tag for it in `index.html` and its name to `SCRIPTS` in `sw.js`, so it works offline.
+
 ## Tests
 
 Run `npm ci`, then `npm test`. The tests exercise the app DOM with jsdom, including date persistence, completion and undo, partial workout saves, input validation, copying previous sets, keyboard cancellation, undoing removals, backup import, editable goals, progress charts, weight suggestions, workout history, food macros and backup reminders. Canvas rendering and visual layout require a browser check.

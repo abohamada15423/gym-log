@@ -14,7 +14,11 @@ function app(t, saved) {
   w.scrollTo = () => {};
   w.HTMLCanvasElement.prototype.getContext = () => ({});
   if (saved) w.localStorage.setItem('gymlog-v1', JSON.stringify(saved));
-  for (const script of w.document.querySelectorAll('script')) w.eval(script.textContent);
+  // Run the page's scripts in order, reading external ones from disk like the browser would.
+  for (const script of w.document.querySelectorAll('script')) {
+    const src = script.getAttribute('src');
+    w.eval(src ? fs.readFileSync(src, 'utf8') : script.textContent);
+  }
   const doc = w.document;
   const click = text => {
     const button = [...doc.querySelectorAll('button')].find(b => b.textContent === text);
