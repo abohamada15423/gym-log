@@ -1108,6 +1108,21 @@
       cursor: pointer
     }
 
+    .chart { width: 100%; height: auto; display: block; overflow: visible }
+    .chart .c-grid { stroke: var(--line); stroke-width: 1 }
+    .chart .c-line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round }
+    .chart .c-area { fill: var(--accent); opacity: .12 }
+    .chart .c-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2 }
+    .chart .c-last { fill: var(--accent) }
+    .chart .c-goal { stroke: var(--gold); stroke-width: 1.5; stroke-dasharray: 5 4 }
+    .chart text { fill: var(--muted); font: 600 10px var(--f-body) }
+    .chart .c-goal-t { fill: var(--gold) }
+    .chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px }
+    .chart-head b { font-size: 1.05rem }
+    .chart-head small { color: var(--muted); font-weight: 600 }
+    .chart-head .up { color: var(--ok) }
+    .chart-head .down { color: var(--warn) }
+
     .toast-act {
       margin-left: 12px;
       background: none;
@@ -2452,6 +2467,69 @@
         }
         clearTimeout(toast._t); toast._t = setTimeout(function () { e.hidden = true; }, ms || 1800);
       }
+      /* ---------- CHARTS ---------- */
+      // points: [{ d: "YYYY-MM-DD", y: number }] sorted by date. Returns an SVG line chart scaled by real time.
+      function lineChart(points, opts) {
+        opts = opts || {};
+        points = points.filter(function (p) { return ymdParse(p.d) && isFinite(p.y); });
+        if (!points.length) return h("div", { class: "empty", text: "No data to chart yet." });
+        var W = 320, H = 150, L = 34, R = 10, T = 12, B = 22;
+        var ys = points.map(function (p) { return p.y; });
+        if (opts.goal != null) ys.push(opts.goal);
+        var lo = Math.min.apply(null, ys), hi = Math.max.apply(null, ys);
+        var pad = Math.max((hi - lo) * 0.15, opts.minSpan || 1);
+        lo -= pad; hi += pad;
+        var t0 = ymdParse(points[0].d).getTime(), t1 = ymdParse(points[points.length - 1].d).getTime();
+        var X = function (d) { return t1 === t0 ? L + (W - L - R) / 2 : L + (ymdParse(d).getTime() - t0) / (t1 - t0) * (W - L - R); };
+        var Y = function (v) { return T + (hi - v) / (hi - lo) * (H - T - B); };
+        var f = function (v) { return v.toFixed(1); };
+        var out = [];
+        [0, 0.5, 1].forEach(function (k) {
+          var v = lo + (hi - lo) * k, y = Y(v);
+          out.push('<line class="c-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + f(y) + '" y2="' + f(y) + '"/>');
+          out.push('<text x="' + (L - 6) + '" y="' + f(y + 3) + '" text-anchor="end">' + mbFmt(Math.round(v * 10) / 10) + '</text>');
+        });
+        if (opts.goal != null) {
+          var gy = Y(opts.goal);
+          out.push('<line class="c-goal" x1="' + L + '" x2="' + (W - R) + '" y1="' + f(gy) + '" y2="' + f(gy) + '"/>');
+          out.push('<text class="c-goal-t" x="' + (W - R) + '" y="' + f(gy - 4) + '" text-anchor="end">Goal ' + mbFmt(opts.goal) + '</text>');
+        }
+        var path = points.map(function (p, i) { return (i ? "L" : "M") + f(X(p.d)) + " " + f(Y(p.y)); }).join(" ");
+        if (points.length > 1) {
+          out.push('<path class="c-area" d="' + path + ' L' + f(X(points[points.length - 1].d)) + ' ' + (H - B) + ' L' + f(X(points[0].d)) + ' ' + (H - B) + ' Z"/>');
+          out.push('<path class="c-line" d="' + path + '"/>');
+        }
+        if (points.length <= 40) points.forEach(function (p, i) {
+          out.push('<circle class="' + (i === points.length - 1 ? "c-last" : "c-dot") + '" cx="' + f(X(p.d)) + '" cy="' + f(Y(p.y)) + '" r="' + (i === points.length - 1 ? 4 : 3) + '"/>');
+        });
+        out.push('<text x="' + L + '" y="' + (H - 5) + '">' + mbShort(points[0].d) + '</text>');
+        if (points.length > 1) out.push('<text x="' + (W - R) + '" y="' + (H - 5) + '" text-anchor="end">' + mbShort(points[points.length - 1].d) + '</text>');
+        var wrap = h("div", { class: "chart-wrap" });
+        wrap.innerHTML = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img"></svg>';
+        wrap.firstChild.setAttribute("aria-label", opts.label || "Chart");
+        wrap.firstChild.innerHTML = out.join("");
+        return wrap;
+      }
+      function chartHead(title, last, unit, change, upIsGood) {
+        var c = Math.round(change * 10) / 10;
+        return h("div", { class: "chart-head" }, [
+          h("div", {}, [h("small", { text: title }), h("br"), h("b", { text: mbFmt(last) + " " + unit })]),
+          h("small", { class: c === 0 ? "" : (c > 0) === !!upIsGood ? "up" : "down", text: (c > 0 ? "+" : "") + mbFmt(c) + " " + unit + " overall" })
+        ]);
+      }
+      // Best estimated 1RM per training day for one exercise (Epley). Bodyweight-only work falls back to best reps.
+      function exerciseTrend(exName) {
+        var byDate = {}, weighted = false;
+        state.sessions.forEach(function (s) { (s.sets && s.sets[exName] || []).forEach(function (p) { if (p[0] > 0) weighted = true; }); });
+        state.sessions.forEach(function (s) {
+          (s.sets && s.sets[exName] || []).forEach(function (p) {
+            var v = weighted ? (p[0] > 0 ? p[0] * (1 + p[1] / 30) : 0) : p[1];
+            if (v > 0 && (byDate[s.date] == null || v > byDate[s.date])) byDate[s.date] = Math.round(v * 10) / 10;
+          });
+        });
+        return { weighted: weighted, points: Object.keys(byDate).sort().map(function (d) { return { d: d, y: byDate[d] }; }) };
+      }
+
       // Remove an entry from state[listName] and offer a few seconds to put it back where it was.
       function removeWithUndo(listName, item, label) {
         var i = state[listName].indexOf(item); if (i < 0) return;
@@ -3462,6 +3540,16 @@
             h("div", { class: "stat" }, [h("div", { class: "k", text: "Est. 1RM" }), h("div", { class: "n", text: oneRM + " kg" })]),
             h("div", { class: "stat" }, [h("div", { class: "k", text: "Per Side (20kg Bar)" }), h("div", { class: "n", style: "font-size:1.25rem", text: plates.length ? plates.join(" + ") + " kg" : "Bar only" })])
           ]));
+        }
+        var trend = exerciseTrend(exName), tp = trend.points, unit = trend.weighted ? "kg" : "reps";
+        var what = trend.weighted ? "Best est. 1RM" : "Best set (reps)";
+        if (tp.length >= 2) {
+          box.appendChild(h("div", { class: "card" }, [
+            chartHead(what + " · " + tp.length + " sessions", tp[tp.length - 1].y, unit, tp[tp.length - 1].y - tp[0].y, true),
+            lineChart(tp, { minSpan: trend.weighted ? 2.5 : 1, label: exName + " " + what + " from " + tp[0].y + " to " + tp[tp.length - 1].y + " " + unit })
+          ]));
+        } else {
+          box.appendChild(h("div", { class: "empty", text: tp.length ? "Log this exercise in one more workout to see your progress chart." : "Your progress chart appears here after you log this exercise in two workouts." }));
         }
         $("modal").hidden = false;
       }
@@ -4488,6 +4576,16 @@
           tile("Total Change", (diff > 0 ? "+" : "") + diff, "kg"),
           tile("To Goal", !cur ? "–" : reached ? "Reached!" : toGoal + " " + (cutting ? "to lose" : "to gain"), reached || !cur ? "" : "kg")
         ]));
+
+        root.appendChild(h("h2", { text: "Weight Trend" }));
+        if (withKg.length < 2) {
+          root.appendChild(h("div", { class: "card empty", text: "Log at least two weigh-ins to see your trend." }));
+        } else {
+          root.appendChild(h("div", { class: "card" }, [
+            chartHead("Bodyweight", cur.kg, "kg", diff, !cutting),
+            lineChart(withKg.map(function (b) { return { d: b.date, y: b.kg }; }), { goal: G.kg, label: "Bodyweight from " + first.kg + " kg on " + first.date + " to " + cur.kg + " kg on " + cur.date + ", goal " + G.kg + " kg" })
+          ]));
+        }
 
         root.appendChild(h("h2", { text: "Log Check-in" }));
         var f = {

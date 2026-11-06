@@ -186,3 +186,24 @@ test('goals are editable on the Plan tab and drive the Meals and Body tabs', t =
   a.doc.getElementById('t-body').click();
   assert.match(a.doc.body.textContent, /4\.4 to gain/);
 });
+
+test('body tab charts weight against the goal; exercise dialog charts best estimated 1RM', t => {
+  const a = app(t, {
+    sessions: [
+      { id: '1', day: 'old', date: '2026-10-01', sets: { 'Bench press': [[60, 6], [60, 5]] } },
+      { id: '2', day: 'old', date: '2026-10-08', sets: { 'Bench press': [[62.5, 6]] } },
+      { id: '3', day: 'old', date: '2026-10-15', sets: { 'Bench press': [[65, 6]] } }
+    ],
+    body: [{ date: '2026-10-01', kg: 90 }, { date: '2026-10-15', kg: 88.5 }, { date: 'bad', kg: 70 }]
+  });
+  a.doc.querySelector('.ex-name').click();
+  const box = a.doc.getElementById('mbox');
+  assert.equal(box.querySelectorAll('svg.chart circle').length, 3);
+  assert.match(box.querySelector('.chart-head').textContent, /78 kg.*\+6 kg overall/);
+  a.click('Close');
+  a.doc.getElementById('t-body').click();
+  const chart = a.doc.querySelector('svg.chart');
+  assert.match(chart.getAttribute('aria-label'), /goal 81 kg/);
+  assert.equal(chart.querySelectorAll('circle').length, 2);
+  assert.ok(chart.querySelector('.c-goal'));
+});

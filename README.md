@@ -13,6 +13,13 @@ Run `python -m http.server 8000` from this directory and open http://localhost:8
 3. Check each completed set to start its rest timer. Use Continue to jump to the next unfinished exercise.
 4. Select Finish workout to review your session, then Save workout. Only checked sets are included. Keep training returns to the draft.
 
+## Progress and goals
+
+- Tap an exercise name or its animation to see the plate calculator and a chart of your best estimated 1RM per workout (best reps for bodyweight exercises).
+- The Body tab charts your weigh-ins against your goal weight.
+- Set your goal weight, daily calories and daily protein on the Plan tab.
+- Removing a workout, check-in or food shows an Undo button for a few seconds. Importing a backup asks before replacing what's on the device.
+
 ## Tests
 
-Run `npm ci`, then `npm test`. The tests exercise the app DOM with jsdom, including date persistence, completion and undo, partial workout saves, input validation, copying previous sets, and keyboard cancellation. Canvas rendering and visual layout require a browser check.
+Run `npm ci`, then `npm test`. The tests exercise the app DOM with jsdom, including date persistence, completion and undo, partial workout saves, input validation, copying previous sets, keyboard cancellation, undoing removals, backup import, editable goals and progress charts. Canvas rendering and visual layout require a browser check.
