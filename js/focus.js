@@ -130,9 +130,7 @@ function paintFocus() {
   body.appendChild(h("div", { class: "f-eyebrow", text: "Exercise " + (st.xi + 1) + " of " + d.ex.length + " · " + st.e[3] }));
   body.appendChild(h("h2", { class: "f-title", text: st.name }));
   body.appendChild(h("p", { class: "f-sub", text: "Set " + (st.i + 1) + " of " + st.n + " · target " + st.e[2] + " reps" }));
-  var cv = h("canvas", {});
-  body.appendChild(h("div", { class: "f-anim" }, [cv]));
-  drawBiomechanicalExercise(cv, st.name, 2.2);
+  body.appendChild(h("div", { class: "f-anim" }, [exerciseDemo(st.name, 2.2)]));
   if (df.prev) body.appendChild(h("div", { class: "f-last", text: "Last time: " + mbFmt(df.prev[0]) + " kg × " + df.prev[1] }));
   if (df.sug && df.sug.up && !cell.done) body.appendChild(h("div", { class: "f-sug", text: "▲ Next: " + df.sug.w + " kg × " + df.sug.r }));
 

@@ -44,12 +44,9 @@ function openPlateModal(exName, weight, reps) {
   var box = $("mbox"); box.textContent = "";
   var oneRM = weight && reps ? Math.round(weight * (1 + reps / 30)) : 0;
   var plates = platesFor(weight, 20);
-  var c = h("canvas", {});
   box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: exName }), h("button", { class: "btn ghost sm", text: "Close" })]));
   box.lastChild.lastChild.onclick = closeModal;
-  var animWrap = h("div", { style: "display:grid;place-items:center;background:var(--soft);border-radius:16px;padding:10px" }, [c]);
-  box.appendChild(animWrap);
-  drawBiomechanicalExercise(c, exName, 1.8);
+  box.appendChild(exerciseDemo(exName, 1.8));
   if (weight > 0) {
     box.appendChild(h("div", { class: "grid2" }, [
       h("div", { class: "stat" }, [h("div", { class: "k", text: "Est. 1RM" }), h("div", { class: "n", text: oneRM + " kg" })]),
