@@ -22,6 +22,8 @@ function renderTrain(root) {
   var streak = weekStreak();
   var steps = focusSteps(d), nextIdx = focusNextOpen(d, steps, 0), nextStep = nextIdx < 0 ? null : steps[nextIdx];
   var hero = h("section", { class: "hero", "aria-label": "Next set" });
+  // Reload the bar only when the exercise or the weight changes, like re-racking in the gym.
+  var heroKey = dayId + "|" + (nextStep ? nextStep.name : "done");
   if (!d.ex.length) {
     hero.appendChild(barbellViz(0, true));
     hero.appendChild(h("p", { class: "hero-line", text: "This day has no exercises yet." }));
@@ -38,6 +40,7 @@ function renderTrain(root) {
     var nr = nc && nc.r !== "" ? nc.r : nd.r;
     var bb = isBarbell(nextStep.name);
     hero.appendChild(barbellViz(nw || 0, bb));
+    heroKey += "|" + nw;
     hero.appendChild(h("div", { class: "hero-weight" }, nw !== null
       ? [h("b", { text: mbFmt(nw) }), h("span", { text: "kg" }), nr !== "" ? h("i", { text: "× " + nr }) : null]
       : [h("b", { class: "tbd", text: "Pick a weight" })]));
@@ -48,6 +51,8 @@ function renderTrain(root) {
     go.onclick = openFocus;
     hero.appendChild(go);
   }
+  if (heroKey !== lastHeroKey) hero.classList.add("load");
+  lastHeroKey = heroKey;
   root.appendChild(hero);
 
   // Tally: one mark per set, grouped by exercise.
@@ -57,7 +62,8 @@ function renderTrain(root) {
       var g = h("span", { class: "tg" }), arr = draft[e[0]] || [];
       for (var i = 0; i < setsFor(d, e); i++) {
         var isNow = nextStep && nextStep.name === e[0] && nextStep.i === i;
-        g.appendChild(h("i", { class: (arr[i] && arr[i].done ? "on" : "") + (isNow ? " now" : "") }));
+        var on = arr[i] && arr[i].done, just = on && fx.pop === e[0] + ":" + i;
+        g.appendChild(h("i", { class: (on ? "on" : "") + (just ? " just" : "") + (isNow ? " now" : "") }));
       }
       tally.appendChild(g);
     });
@@ -108,7 +114,10 @@ function renderTrain(root) {
     b.onclick = function () { dayId = x.id; expandedExercise = null; fx.enter = true; render(); };
     return b;
   }));
+  var dayInd = h("span", { class: "day-ind", "aria-hidden": "true" });
+  chips.appendChild(dayInd);
   root.appendChild(chips);
+  placeDayInd(chips, dayInd);
 
   // Program name + customize / change system
   var editDayBtn = h("button", { class: "btn ghost", type: "button", text: "✎ Edit exercises" });
@@ -122,7 +131,7 @@ function renderTrain(root) {
   };
   root.appendChild(h("details", { class: "workout-settings" }, [h("summary", { text: "Workout date and program" }), h("div", { class: "workout-tools" }, [h("label", {}, ["Session date", dateIn]), editDayBtn, sysBtn])]));
   root.appendChild(h("h2", { class: "sec-title", text: "Exercises" }));
-  var nextExercise = null;
+  var nextExercise = null, openNow = null;
   var firstUnfinished = d.ex.findIndex(function (exercise) { var n = setsFor(d, exercise); return (draft[exercise[0]] || []).slice(0, n).filter(function (s) { return s && s.done; }).length < n; });
 
   if (!d.ex.length) {
@@ -144,7 +153,8 @@ function renderTrain(root) {
     var cardId = "exercise-" + exerciseIndex;
     if (!nextExercise && completedCount < setsCount) nextExercise = { id: cardId, name: name, set: completedCount + 1 };
     var isExpanded = expandedExercise === null ? exerciseIndex === firstUnfinished : expandedExercise === name;
-    var card = h("section", { class: "card ex" + (isExpanded ? " open" : ""), id: cardId, "aria-label": name, tabindex: "-1" });
+    var card = h("section", { class: "card ex" + (isExpanded ? " open" : "") + (isExpanded && lastOpenEx !== name ? " opening" : ""), id: cardId, "aria-label": name, tabindex: "-1" });
+    if (isExpanded) openNow = name;
     var exerciseBody = h("div", { class: "exercise-body", id: cardId + "-body" });
     exerciseBody.hidden = !isExpanded;
     var expandBtn = h("button", { class: "exercise-toggle", type: "button", "aria-expanded": String(isExpanded), "aria-controls": cardId + "-body", "aria-label": (isExpanded ? "Collapse " : "Expand ") + name, text: "⌄" });
@@ -348,7 +358,7 @@ function renderTrain(root) {
     if (allDone) card.classList.add("done");
     if (allDone && fx.pop && fx.pop.indexOf(name + ":") === 0) {
       card.classList.add("celebrate");
-      (function (c) { requestAnimationFrame(function () { var r = c.getBoundingClientRect(); confetti(r.left + r.width - 48, r.top + 36, 30); }); })(card);
+      var tg = root.querySelectorAll(".tally .tg")[exerciseIndex]; if (tg) tg.classList.add("full");
     }
     exerciseBody.appendChild(grid);
 
@@ -441,13 +451,15 @@ function renderTrain(root) {
       fx.enter = true;
       render();
       toast(prs.length ? "New PR 🏆 " + prs.slice(0, 2).join(" · ") : "Session saved! Great work 💪", 2800);
-      requestAnimationFrame(function () { confetti(innerWidth / 2, innerHeight * 0.55, prs.length ? 110 : 60); });
+      if (prs.length) requestAnimationFrame(function () { confetti(innerWidth / 2, innerHeight * 0.55, 110); });
       window.scrollTo(0, 0);
     };
     box.appendChild(h("div", { class: "grid2" }, [keepGoing, confirmSave]));
     $("modal").hidden = false;
     keepGoing.focus();
   };
+  lastOpenEx = openNow;
+
   // Workout bar: what's next (tap to jump there), progress or rest countdown, Finish and Focus.
   var idleSub = doneSets + " / " + totalSets + " sets done";
   var subEl = h("small", { class: "dock-sub", text: idleSub });
@@ -511,4 +523,17 @@ function dockRest() {
     var left = Math.max(0, Math.ceil((rest.end - Date.now()) / 1000));
     sub.textContent = "Rest " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") + " left";
   } else sub.textContent = sub.getAttribute("data-idle");
+}
+
+var lastHeroKey = null, lastOpenEx = null, lastDayIndX = null;
+// Slide the underline from the previous day to the selected one (offsets ignore transforms).
+function placeDayInd(row, ind) {
+  var b = row.querySelector('.day[aria-pressed="true"]'); if (!b || !b.offsetWidth) return;
+  var x = b.offsetLeft, w = b.offsetWidth;
+  ind.style.width = w + "px";
+  if (lastDayIndX !== null && lastDayIndX !== x && !REDUCED) {
+    ind.style.transform = "translateX(" + lastDayIndX + "px)";
+    requestAnimationFrame(function () { requestAnimationFrame(function () { ind.classList.add("glide"); ind.style.transform = "translateX(" + x + "px)"; }); });
+  } else ind.style.transform = "translateX(" + x + "px)";
+  lastDayIndX = x;
 }

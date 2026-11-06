@@ -94,12 +94,12 @@ function confetti(x, y, n) {
   if (REDUCED) return;
   var cv = $("fx"), dpr = Math.min(2, window.devicePixelRatio || 1);
   if (cv.width !== Math.round(innerWidth * dpr)) { cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr); }
-  var cols = ["#F5A400", "#FFD23F", "#2F5BFF", "#5B80FF", "#10B981", "#EAF0FA", "#FF6B3D"];
+  var cols = ["#e5484d", "#3b7cf6", "#f2c230", "#34b36a", "#ece9e2", "#c8f542"]; // plate colours + signal lime
   for (var i = 0; i < n; i++) {
     var a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4, v = 4 + Math.random() * 7.5;
     fxParts.push({
       x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.4,
-      w: 5 + Math.random() * 5, h: 3 + Math.random() * 4, c: cols[(Math.random() * cols.length) | 0], life: 70 + Math.random() * 50, age: 0
+      w: 3 + Math.random() * 3, h: 9 + Math.random() * 8, c: cols[(Math.random() * cols.length) | 0], life: 70 + Math.random() * 50, age: 0
     });
   }
   if (!fxRaf) fxRaf = requestAnimationFrame(fxLoop);
@@ -129,14 +129,15 @@ function barbellViz(weight, barbell) {
     var gap = 1.5, total = plates.reduce(function (a, p) { return a + PLATE_STYLE[p][2] + gap; }, 0);
     var room = 92, k = total > room ? room / total : 1;
     out.push('<rect class="bv-bar" x="14" y="' + (cy - 3) + '" width="' + (W - 28) + '" height="6" rx="3"/>');
-    out.push('<rect class="bv-collar" x="104" y="' + (cy - 9) + '" width="7" height="18" rx="2"/><rect class="bv-collar" x="' + (W - 111) + '" y="' + (cy - 9) + '" width="7" height="18" rx="2"/>');
+    var nP = weight > 20 ? platesFor(weight, 20).length : 0;
+    out.push('<rect class="bv-collar" style="--k:' + nP + ';--dx:-30px" x="104" y="' + (cy - 9) + '" width="7" height="18" rx="2"/><rect class="bv-collar" style="--k:' + nP + ';--dx:30px" x="' + (W - 111) + '" y="' + (cy - 9) + '" width="7" height="18" rx="2"/>');
     out.push('<rect class="bv-knurl" x="122" y="' + (cy - 3) + '" width="' + (W - 244) + '" height="6"/>');
     [-1, 1].forEach(function (side) {
       var x = side < 0 ? 102 : W - 102;
-      plates.forEach(function (p) {
+      plates.forEach(function (p, i) {
         var st = PLATE_STYLE[p], w = st[2] * k, hh = st[1];
         var px = side < 0 ? x - w : x;
-        out.push('<rect class="bv-plate" style="fill:var(' + st[0] + ')" x="' + px.toFixed(1) + '" y="' + (cy - hh / 2) + '" width="' + w.toFixed(1) + '" height="' + hh + '" rx="2"/>');
+        out.push('<rect class="bv-plate" style="fill:var(' + st[0] + ');--k:' + i + ';--dx:' + (side * 70) + 'px" x="' + px.toFixed(1) + '" y="' + (cy - hh / 2) + '" width="' + w.toFixed(1) + '" height="' + hh + '" rx="2"/>');
         x += side * (w + gap * k);
       });
     });
