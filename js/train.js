@@ -18,24 +18,55 @@ function renderTrain(root) {
   });
 
   pct = totalSets ? Math.round(doneSets / totalSets * 100) : 0;
-  var volB = h("b", { text: "0" });
-  // rough session length: each set plus its rest, plus a little setup time
-  var mins = Math.max(5, Math.round(d.ex.reduce(function (a, e) { return a + setsFor(d, e) * ((e[4] || 90) + 45); }, 0) / 60 / 5) * 5);
+  // Hero: the bar loaded for your next set.
   var streak = weekStreak();
-  var hero = h("section", { class: "hero" }, [
-    h("div", { class: "hero-tag", text: "Today · " + d.tag + " of " + DAYS.length }),
-    h("h2", { class: "hero-title", text: d.name }),
-    h("p", { class: "hero-meta", text: d.ex.length + " exercises · " + totalSets + " sets · ~" + mins + " min" }),
-    h("div", { class: "hero-stats" }, [
-      h("div", {}, [h("b", { text: doneSets + " / " + totalSets }), h("small", { text: "sets done" })]),
-      h("div", {}, [volB, h("small", { text: "kg volume" })]),
-      h("div", {}, [h("b", { text: (streak ? "🔥 " : "") + streak }), h("small", { text: "week streak" })])
-    ]),
-    h("div", { class: "hero-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(pct), "aria-label": pct + "% complete" }, [h("i", { style: "width:" + pct + "%" })])
-  ]);
+  var steps = focusSteps(d), nextIdx = focusNextOpen(d, steps, 0), nextStep = nextIdx < 0 ? null : steps[nextIdx];
+  var hero = h("section", { class: "hero", "aria-label": "Next set" });
+  if (!d.ex.length) {
+    hero.appendChild(barbellViz(0, true));
+    hero.appendChild(h("p", { class: "hero-line", text: "This day has no exercises yet." }));
+  } else if (!nextStep) {
+    hero.appendChild(barbellViz(0, true));
+    hero.appendChild(h("div", { class: "hero-weight done" }, [h("b", { text: "Done" })]));
+    hero.appendChild(h("p", { class: "hero-line", text: "Every set is logged. Save the workout to keep it." }));
+    var finHero = h("button", { class: "btn hero-go", type: "button", text: "Finish workout" });
+    finHero.onclick = function () { var b = document.querySelector(".session-dock .dock-finish"); if (b) b.click(); };
+    hero.appendChild(finHero);
+  } else {
+    var nc = (draft[nextStep.name] || [])[nextStep.i], nd = focusDefaults(d, nextStep);
+    var nw = nc && nc.w !== "" ? num(nc.w) : (nd.w === "" ? null : num(nd.w));
+    var nr = nc && nc.r !== "" ? nc.r : nd.r;
+    var bb = isBarbell(nextStep.name);
+    hero.appendChild(barbellViz(nw || 0, bb));
+    hero.appendChild(h("div", { class: "hero-weight" }, nw !== null
+      ? [h("b", { text: mbFmt(nw) }), h("span", { text: "kg" }), nr !== "" ? h("i", { text: "× " + nr }) : null]
+      : [h("b", { class: "tbd", text: "Pick a weight" })]));
+    var line = h("p", { class: "hero-line" }, [h("span", { text: nextStep.name + ", set " + (nextStep.i + 1) + " of " + nextStep.n + "." })]);
+    if (nd.prev) line.appendChild(h("span", { text: " Last time " + mbFmt(nd.prev[0]) + " × " + nd.prev[1] + "." }));
+    hero.appendChild(line);
+    var go = h("button", { class: "btn hero-go", type: "button", text: "Start set" });
+    go.onclick = openFocus;
+    hero.appendChild(go);
+  }
   root.appendChild(hero);
+
+  // Tally: one mark per set, grouped by exercise.
+  if (d.ex.length) {
+    var tally = h("div", { class: "tally", role: "img", "aria-label": doneSets + " of " + totalSets + " sets done" });
+    d.ex.forEach(function (e) {
+      var g = h("span", { class: "tg" }), arr = draft[e[0]] || [];
+      for (var i = 0; i < setsFor(d, e); i++) {
+        var isNow = nextStep && nextStep.name === e[0] && nextStep.i === i;
+        g.appendChild(h("i", { class: (arr[i] && arr[i].done ? "on" : "") + (isNow ? " now" : "") }));
+      }
+      tally.appendChild(g);
+    });
+    root.appendChild(tally);
+    var sum = h("p", { class: "tally-note" }, [h("span", { text: liveVol > 0 ? Math.round(liveVol).toLocaleString() + " kg lifted today." : "Nothing lifted yet today." })]);
+    if (streak) sum.appendChild(h("span", { text: " " + streak + (streak === 1 ? " week" : " weeks") + " in a row." }));
+    root.appendChild(sum);
+  }
   if (backupDue()) root.appendChild(backupNag());
-  countUp(volB, lastPct.day === dayId ? lastPct.vol : 0, liveVol);
   lastPct = { day: dayId, pct: pct, vol: liveVol };
 
   // Daily Creatine + Water Quick Strip
@@ -89,7 +120,7 @@ function renderTrain(root) {
     sessionDates[dateKey] = dateIn.value || today();
     state.sessionDates = sessionDates; save();
   };
-  root.appendChild(h("details", { class: "workout-settings" }, [h("summary", { text: "Workout settings · date & program" }), h("div", { class: "workout-tools" }, [h("label", {}, ["Session date", dateIn]), editDayBtn, sysBtn])]));
+  root.appendChild(h("details", { class: "workout-settings" }, [h("summary", { text: "Workout date and program" }), h("div", { class: "workout-tools" }, [h("label", {}, ["Session date", dateIn]), editDayBtn, sysBtn])]));
   root.appendChild(h("h2", { class: "sec-title", text: "Exercises" }));
   var nextExercise = null;
   var firstUnfinished = d.ex.findIndex(function (exercise) { var n = setsFor(d, exercise); return (draft[exercise[0]] || []).slice(0, n).filter(function (s) { return s && s.done; }).length < n; });
@@ -112,8 +143,8 @@ function renderTrain(root) {
     var completedCount = exDraft.slice(0, setsCount).filter(function (s) { return s && s.done; }).length;
     var cardId = "exercise-" + exerciseIndex;
     if (!nextExercise && completedCount < setsCount) nextExercise = { id: cardId, name: name, set: completedCount + 1 };
-    var card = h("section", { class: "card ex", id: cardId, "aria-label": name, tabindex: "-1" });
     var isExpanded = expandedExercise === null ? exerciseIndex === firstUnfinished : expandedExercise === name;
+    var card = h("section", { class: "card ex" + (isExpanded ? " open" : ""), id: cardId, "aria-label": name, tabindex: "-1" });
     var exerciseBody = h("div", { class: "exercise-body", id: cardId + "-body" });
     exerciseBody.hidden = !isExpanded;
     var expandBtn = h("button", { class: "exercise-toggle", type: "button", "aria-expanded": String(isExpanded), "aria-controls": cardId + "-body", "aria-label": (isExpanded ? "Collapse " : "Expand ") + name, text: "⌄" });
@@ -129,7 +160,7 @@ function renderTrain(root) {
     };
 
     // Top metadata + Fill all button
-    var fillAllBtn = h("button", { class: "set-base-btn", text: lastSets.length ? "↺ Fill Last" : "＋ Set Last KG" });
+    var fillAllBtn = h("button", { class: "set-base-btn", text: lastSets.length ? "↺ Fill last" : "＋ Set last weight" });
     fillAllBtn.onclick = function () {
       if (!lastSets.length) { openBaselineModal(name); return; }
       for (var i = 0; i < setsCount; i++) {
@@ -143,20 +174,18 @@ function renderTrain(root) {
       toast("Filled last weights for " + name);
     };
 
-    var lastTxt = lastSets.length ? "last " + mbFmt(lastSets[0][0]) + " × " + lastSets[0][1] : "";
-    var sub = h("div", { class: "ex-sub" }, [
-      h("span", { class: "pill", text: setsCount + " × " + repsTarget }),
-      hist.pr ? h("span", { class: "pill gold", text: "PR: " + hist.pr[0] + "kg × " + hist.pr[1] }) : null,
-      h("span", { class: "ex-count" + (completedCount === setsCount ? " complete" : ""), text: completedCount === setsCount ? "✓ Exercise complete" : completedCount + " of " + setsCount + " sets complete" })
-    ]);
+    // One plain line under the name: target, then last time if there is one.
+    var desc = h("p", { class: "ex-desc" }, [h("span", { text: setsCount + " sets of " + repsTarget + "." })]);
+    if (lastSets.length) desc.appendChild(h("span", { text: " Last time " + mbFmt(lastSets[0][0]) + " × " + lastSets[0][1] + "." }));
+    if (hist.pr && hist.date !== "Baseline") desc.appendChild(h("span", { class: "best", text: " Best " + mbFmt(hist.pr[0]) + " × " + hist.pr[1] + "." }));
+    var countEl = h("span", { class: "ex-count" + (completedCount === setsCount ? " complete" : ""), "aria-label": completedCount + " of " + setsCount + " sets complete", text: completedCount + "/" + setsCount });
 
     var head = h("div", { class: "ex-head" }, [
       icoBox,
       h("div", { class: "ex-meta" }, [
         h("div", { class: "ex-name", text: name, onclick: icoBox.onclick }),
-        h("div", { class: "ex-muscle", text: muscle + (lastTxt ? " · " + lastTxt : "") }),
-        sub
-      ]), expandBtn
+        desc
+      ]), countEl, expandBtn
     ]);
     card.appendChild(head);
     var warmBtn = h("button", { class: "set-base-btn", type: "button", text: "🔥 Warm-up" });
@@ -171,10 +200,10 @@ function renderTrain(root) {
     /* --- QUICK LAST LIFTED MEMORY STRIP --- */
     var lastBox = h("div", { class: "last-box" });
     if (lastSets.length) {
-      var editBaseBtn = h("button", { class: "set-base-btn", style: "background:transparent;padding:0", text: "Edit Reference ✎" });
+      var editBaseBtn = h("button", { class: "set-base-btn", style: "background:transparent;padding:0", text: "Edit" });
       editBaseBtn.onclick = function () { openBaselineModal(name); };
       lastBox.appendChild(h("div", { class: "last-hdr" }, [
-        h("div", { class: "last-title" }, [hist.date === "Baseline" ? "Your reference" : "Last time · " + mbDay(hist.date), h("small", { text: "Tap a set to copy it" })]),
+        h("div", { class: "last-title" }, [hist.date === "Baseline" ? "Your reference" : "Last time, " + mbDay(hist.date), h("small", { text: "Tap a set to copy it" })]),
         editBaseBtn
       ]));
       var chipWrap = h("div", { class: "last-chips" });
@@ -425,7 +454,9 @@ function renderTrain(root) {
   subEl.setAttribute("data-idle", idleSub);
   var info;
   if (nextExercise) {
-    info = h("button", { class: "dock-info continue-btn", type: "button", "aria-label": "Go to " + nextExercise.name }, [h("b", { text: "Set " + nextExercise.set + " · " + nextExercise.name }), subEl]);
+    // name under the set number; the rest countdown takes its place while resting
+    subEl.textContent = nextExercise.name; subEl.setAttribute("data-idle", nextExercise.name);
+    info = h("button", { class: "dock-info continue-btn", type: "button", "aria-label": "Go to " + nextExercise.name }, [h("b", { text: "Set " + nextExercise.set + " of " + setsFor(d, d.ex.filter(function (e) { return e[0] === nextExercise.name; })[0]) }), subEl]);
     info.onclick = function () {
       expandedExercise = nextExercise.name;
       render();
@@ -448,7 +479,7 @@ function renderTrain(root) {
   root.appendChild(dailyHabits);
 
   // Recent Sessions History
-  root.appendChild(h("h2", { text: "Recent Sessions" }));
+  root.appendChild(h("h2", { text: "Recent workouts" }));
   var list = h("div", { class: "card list" }), recent = state.sessions.slice(-6).reverse();
   if (!recent.length) list.appendChild(h("div", { class: "empty", text: "No completed sessions yet." }));
   recent.forEach(function (s) {

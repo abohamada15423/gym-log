@@ -26,7 +26,7 @@ function openBaselineModal(exName) {
   var cur = state.baselines[exName] || [60, 8];
   var wIn = h("input", { type: "text", inputmode: "decimal", value: String(cur[0]), placeholder: "KG" });
   var rIn = h("input", { type: "text", inputmode: "numeric", value: String(cur[1]), placeholder: "Reps" });
-  var saveB = h("button", { class: "btn", text: "Save Last Lifted Weight" });
+  var saveB = h("button", { class: "btn", text: "Save last weight" });
   saveB.onclick = function () {
     var w = num(wIn.value), r = num(rIn.value);
     if (w === null || r === null) { toast("Enter valid kg & reps"); return; }
@@ -53,7 +53,7 @@ function openPlateModal(exName, weight, reps) {
   if (weight > 0) {
     box.appendChild(h("div", { class: "grid2" }, [
       h("div", { class: "stat" }, [h("div", { class: "k", text: "Est. 1RM" }), h("div", { class: "n", text: oneRM + " kg" })]),
-      h("div", { class: "stat" }, [h("div", { class: "k", text: "Per Side (20kg Bar)" }), h("div", { class: "n", style: "font-size:1.25rem", text: plates.length ? plates.join(" + ") + " kg" : "Bar only" })])
+      h("div", { class: "stat" }, [h("div", { class: "k", text: "Per side, 20 kg bar" }), h("div", { class: "n", style: "font-size:1.25rem", text: plates.length ? plates.join(" + ") + " kg" : "Bar only" })])
     ]));
   }
   var trend = exerciseTrend(exName), tp = trend.points, unit = trend.weighted ? "kg" : "reps";
@@ -154,7 +154,7 @@ function openHistoryModal(openId) {
   var all = state.sessions.map(function (s, i) { return { s: s, i: i }; })
     .sort(function (a, b) { return a.s.date === b.s.date ? b.i - a.i : (a.s.date < b.s.date ? 1 : -1); });
   var totalVol = all.reduce(function (t, x) { return t + sessionVolume(x.s); }, 0);
-  box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Workout History" }), close]));
+  box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Workout history" }), close]));
   box.appendChild(h("div", { class: "grid2" }, [
     h("div", { class: "stat" }, [h("div", { class: "k", text: "Workouts" }), h("div", { class: "n", text: String(all.length) })]),
     h("div", { class: "stat" }, [h("div", { class: "k", text: "Total volume" }), h("div", { class: "n" }, [Math.round(totalVol).toLocaleString(), h("small", { text: "kg" })])])
@@ -240,7 +240,7 @@ function openPicker(d, back) {
   var group = "All", q = "";
   var done = h("button", { class: "btn sm", type: "button", text: "Done" });
   done.onclick = back;
-  box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Exercise Library" }), done]));
+  box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Exercise library" }), done]));
   var search = h("input", { type: "text", placeholder: "Search exercises…", style: "text-align:start" });
   var chipRow = h("div", { class: "fchips" });
   var listEl = h("div", { class: "list" });
@@ -309,12 +309,12 @@ function openPicker(d, back) {
 
 /* ---------- TRAINING SYSTEM SELECTOR ---------- */
 function renderPrograms(root) {
-  root.appendChild(h("h2", { text: "Training System" }));
+  root.appendChild(h("h2", { text: "Training program" }));
   var wrap = h("div", { style: "display:flex;flex-direction:column;gap:8px" });
   function card(id, name, freq, desc, days, onclick) {
     var active = state.programId === id;
     var b = h("button", { class: "prog" + (active ? " active" : ""), type: "button" }, [
-      h("div", { class: "prog-top2" }, [h("b", { text: name }), h("span", { class: "pill" + (active ? " gold" : ""), text: active ? "Active · " + freq : freq })]),
+      h("div", { class: "prog-top2" }, [h("b", { text: name }), h("span", { class: "pill" + (active ? " gold" : ""), text: active ? "Active, " + freq : freq })]),
       h("div", { class: "empty", text: desc }),
       days ? h("div", { style: "font-family:var(--f-data);font-size:.72rem;color:var(--muted)", text: days }) : null
     ]);
@@ -342,7 +342,7 @@ function renderPrograms(root) {
   root.appendChild(h("div", { class: "grid2" }, [newBtn, copyBtn]));
 
   if (state.programId === "custom" && state.custom) {
-    root.appendChild(h("h2", { text: "Edit My Program" }));
+    root.appendChild(h("h2", { text: "Edit my program" }));
     var nameIn = h("input", { type: "text", value: state.custom.name, style: "text-align:start" });
     nameIn.oninput = function () { state.custom.name = nameIn.value || "My Program"; save(); };
     var list = h("div", { class: "list" });

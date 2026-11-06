@@ -53,7 +53,7 @@ function renderMeals(root) {
     root.appendChild(mine);
   }
 
-  root.appendChild(h("h2", { text: "Quick Add Meals & High-Protein Staples" }));
+  root.appendChild(h("h2", { text: "Quick add" }));
   var chips = h("div", { class: "fchips" });
   MEALS.concat(QUICK_FOODS).forEach(function (m) {
     var b = h("button", { class: "btn ghost", text: "+ " + m.name + " (" + m.p + "g P)" });
@@ -62,7 +62,7 @@ function renderMeals(root) {
   });
   root.appendChild(chips);
 
-  root.appendChild(h("h2", { text: "Add Custom Food" }));
+  root.appendChild(h("h2", { text: "Add a food" }));
   var f = {
     name: h("input", { type: "text", placeholder: "Food name", style: "text-align:start" }),
     kcal: h("input", { type: "text", inputmode: "numeric", placeholder: "auto" }),
@@ -71,7 +71,7 @@ function renderMeals(root) {
     fat: h("input", { type: "text", inputmode: "decimal", placeholder: "g" }),
     keep: h("input", { type: "checkbox" })
   };
-  var add = h("button", { class: "btn", text: "Add Food" });
+  var add = h("button", { class: "btn", text: "Add food" });
   add.onclick = function () {
     var k = num(f.kcal.value), p = num(f.pro.value), c = num(f.carb.value), ff = num(f.fat.value);
     if ([p, c, ff].some(function (v) { return v !== null && v < 0; })) { toast("Macros can't be negative"); return; }

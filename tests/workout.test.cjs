@@ -95,7 +95,7 @@ test('fill last preserves completed work and fills remaining sets', t => {
   a.input(row.querySelectorAll('input')[0], '65');
   a.input(row.querySelectorAll('input')[1], '6');
   row.querySelector('.chk').click();
-  a.click('↺ Fill Last');
+  a.click('↺ Fill last');
   const sets = a.state().drafts.push['Bench press'];
   assert.equal(sets[0].w, '65');
   assert.equal(sets[1].w, '50');
@@ -135,7 +135,7 @@ test('tapping an exercise name opens its form dialog, and the baseline dialog cl
   assert.equal(a.doc.getElementById('modal').hidden, false);
   assert.match(a.doc.querySelector('#mbox .mtitle').textContent, /Bench press/);
   a.click('Close');
-  a.click('＋ Set Last KG');
+  a.click('＋ Set last weight');
   assert.equal(a.doc.getElementById('modal').hidden, false);
   a.click('✕');
   assert.equal(a.doc.getElementById('modal').hidden, true);
@@ -254,7 +254,7 @@ test('custom food with macros works out calories, totals carbs and fat, and can 
   field('Carbs').value = '60';
   field('Fat').value = '10';
   a.doc.querySelector('.check input').checked = true;
-  a.click('Add Food');
+  a.click('Add food');
   const food = a.state().food[0];
   assert.equal(food.kcal, 4 * 20 + 4 * 60 + 9 * 10);
   assert.deepEqual([food.c, food.f], [60, 10]);
@@ -293,7 +293,7 @@ test('sets can be added or removed for today only, and notes are saved with the 
   assert.equal(card().querySelectorAll('.set').length, 4);
   a.click('＋ Add set');
   assert.equal(card().querySelectorAll('.set').length, 5);
-  assert.match(a.doc.querySelector('.session-dock').textContent, /0 \/ 21 sets/);
+  assert.match(a.doc.querySelector('.hero-line').textContent, /set 1 of 5/);
   const rows = card().querySelectorAll('.set');
   a.input(rows[4].querySelectorAll('input')[0], '60');
   a.input(rows[4].querySelectorAll('input')[1], '5');
@@ -369,7 +369,7 @@ test('habits keep old data, can be added and removed on the Plan tab, and count 
   type.value = 'count'; type.dispatchEvent(new a.w.Event('change'));
   lbl('Daily goal').querySelector('input').value = '8';
   lbl('Unit').querySelector('input').value = 'h';
-  a.click('Add Habit');
+  a.click('Add habit');
   assert.deepEqual(a.state().habitList.map(h => h.name), ['Creatine 5g', 'Water', 'Sleep']);
   const removeCreatine = [...a.doc.querySelectorAll('.hed')].find(r => r.textContent.includes('Creatine')).querySelector('button');
   removeCreatine.click();
@@ -387,7 +387,7 @@ test('check-ins take extra measurements and each one gets its own trend chart', 
   lbl('Weight').value = '89';
   lbl('Arms').value = '38.5';
   lbl('Body fat').value = '22';
-  a.click('Save Check-in');
+  a.click('Save check-in');
   assert.deepEqual(a.state().body.at(-1), { date: '2026-10-15', note: '', kg: 89, waist: null, chest: null, arm: 38.5, thigh: null, hips: null, fat: 22 });
   const chips = [...a.doc.querySelectorAll('.mchips button')].map(b => b.textContent);
   assert.deepEqual(chips, ['Weight', 'Arms', 'Body fat']);
@@ -397,7 +397,7 @@ test('check-ins take extra measurements and each one gets its own trend chart', 
   a.click('Body fat');
   assert.match(a.doc.body.textContent, /Log at least two body fat entries/);
   lbl('Body fat').value = '90';
-  a.click('Save Check-in');
+  a.click('Save check-in');
   assert.match(a.doc.getElementById('toast').textContent, /body fat/);
 });
 
@@ -415,7 +415,7 @@ test('Arabic switches the page to right-to-left and translates it, and English r
   a.doc.getElementById('t-train').click();
   await tick();
   const card = a.doc.querySelector('.ex');
-  assert.match(card.querySelector('.ex-count').textContent, /المجموعات المكتملة: 0 من 4/);
+  assert.match(card.querySelector('.ex-count').getAttribute('aria-label'), /المجموعات المكتملة: 0 من 4/);
   assert.match(card.querySelector('.suggest').textContent, /التالي: 82\.5 كجم × 6/);
   assert.equal(card.querySelector('.ex-name').textContent, 'Bench press');
   assert.match(card.querySelector('.chk').getAttribute('aria-label'), /^إكمال Bench press، المجموعة 1$/);
@@ -433,7 +433,7 @@ test('Arabic switches the page to right-to-left and translates it, and English r
   await tick();
   assert.equal(a.doc.documentElement.getAttribute('dir'), 'ltr');
   assert.equal(a.doc.getElementById('t-train').textContent.trim(), 'Train');
-  assert.ok(a.doc.body.textContent.includes('Your Goals'));
+  assert.ok(a.doc.body.textContent.includes('Your goals'));
 });
 
 test('focus mode walks through sets one at a time, rests between them, and shares the draft', t => {

@@ -1,27 +1,30 @@
 /* ---------- Design tokens: dark athletic ---------- */
 :root {
-  --bg: #0b0b0d;
-  --surface: #17171b;
-  --surface-2: #202026;
-  --surface-3: #2a2a31;
-  --ink: #f4f4f5;
-  --muted: #8e8e96;
-  --line: #2a2a31;
-  --accent: #c6ff3d;
-  --accent-d: #8fbf1f;
-  --accent-ink: #0b0b0d;
-  --soft: #1f2714;
-  --gold: #ffb547;
-  --gold-soft: #2b2214;
-  --ok: #c6ff3d;
-  --ok-soft: #1f2714;
-  --warn: #ff6b4a;
-  --sil: #1c1c21;
-  --m0: #2a2a31; --m1: #36441a; --m2: #66861f; --m3: #c6ff3d; --m4: #ffb547;
-  --f-display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --f-body: "Inter", "Barlow", system-ui, -apple-system, sans-serif;
+  /* gym materials */
+  --bg: #151619;          /* rubber */
+  --surface: #1f2124;     /* iron */
+  --surface-2: #26292d;
+  --surface-3: #34373d;   /* steel */
+  --ink: #ece9e2;         /* chalk */
+  --muted: #8e9096;       /* dust */
+  --line: #2b2e33;
+  --accent: #c8f542;      /* signal lime: done, next, live */
+  --accent-d: #93b52a;
+  --accent-ink: #151619;
+  --soft: #252c17;
+  --gold: #f2c230;
+  --gold-soft: #2c2716;
+  --ok: #c8f542;
+  --ok-soft: #252c17;
+  --warn: #e5484d;
+  --sil: #1d1f22;
+  --m0: #2b2e33; --m1: #3a4719; --m2: #6d8a22; --m3: #c8f542; --m4: #f2c230;
+  /* IWF plate colours: only inside plate graphics */
+  --p25: #e5484d; --p20: #3b7cf6; --p15: #f2c230; --p10: #34b36a; --p5: #ece9e2; --psmall: #8e9096;
+  --f-display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+  --f-body: "Archivo", system-ui, -apple-system, sans-serif;
   --f-data: var(--f-body);
-  --r: 18px;
+  --r: 20px;
   --ease-out: cubic-bezier(.2, .9, .3, 1);
   --spring: cubic-bezier(.3, 1.45, .5, 1);
   color-scheme: dark;
@@ -2030,8 +2033,8 @@ button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .lang-switch .btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
 .lang-switch .btn[lang="ar"] { font-family: "IBM Plex Sans Arabic", var(--f-body) }
 :root[lang="ar"] {
-  --f-display: "IBM Plex Sans Arabic", "Barlow Condensed", sans-serif;
-  --f-body: "IBM Plex Sans Arabic", "Barlow", system-ui, sans-serif;
+  --f-display: "IBM Plex Sans Arabic", sans-serif;
+  --f-body: "IBM Plex Sans Arabic", "Archivo", system-ui, sans-serif;
   --f-data: "IBM Plex Sans Arabic", "IBM Plex Mono", ui-monospace, monospace;
 }
 /* Arabic letters join, so tracking and capitals do not apply */
@@ -2330,3 +2333,115 @@ body[data-tab="train"] .rest { display: none !important }
 .rbtn { background: var(--surface-3); color: var(--ink); border: 0 }
 .rest.go { background: var(--accent); color: var(--accent-ink) }
 .rest { bottom: calc(90px + env(safe-area-inset-bottom, 0px)) }
+
+/* =====================================================================
+   Rubber & iron (frontend-design pass)
+   One bold thing: the loaded bar. Everything else quiet.
+   Lime = done / next / live. Plate colours = weight. No all-caps.
+   ===================================================================== */
+*, *::before, *::after { text-transform: none !important }
+label, small, .k, .cols, .hero-tag, .eyebrow, .f-eyebrow, .f-field small, .f-prog small, .f-next small, .mtitle, .sec-title, h1, h2, h3 { letter-spacing: 0 !important }
+body { font: 400 16px/1.45 var(--f-body); background: var(--bg) }
+
+/* headings: Big Shoulders, mixed case */
+.hello h1 { font: 800 2.35rem/.95 var(--f-display) }
+.hello small { font: 600 .85rem var(--f-body); color: var(--muted) }
+.view h2, .sec-title { font: 800 1.75rem/1 var(--f-display); margin: 26px 0 10px }
+.mtitle { font: 800 1.7rem/1 var(--f-display) }
+label { font: 600 .8rem var(--f-body); color: var(--muted) }
+.btn { font: 700 .95rem var(--f-body); border-radius: 14px }
+
+/* ---- hero: the loaded bar ---- */
+.hero { background: none; border: 0; padding: 4px 0 0; border-radius: 0 }
+.bar-viz { margin: 4px -6px 0 }
+.bar-viz svg { display: block; width: 100%; height: auto }
+.bv-bar { fill: #6b6e74 }
+.bv-knurl { fill: #575a60 }
+.bv-collar { fill: #9a9da3 }
+.bv-head { fill: var(--surface-3) }
+.bv-plate { stroke: rgba(0,0,0,.35); stroke-width: 1 }
+.hero-weight { display: flex; align-items: baseline; gap: 8px; margin-top: 2px }
+.hero-weight b { font: 900 6rem/.85 var(--f-display); color: var(--ink); letter-spacing: -.01em }
+.hero-weight span { font: 800 1.9rem var(--f-display); color: var(--muted) }
+.hero-weight i { font: 800 1.9rem var(--f-display); font-style: normal; color: var(--muted); margin-inline-start: 6px }
+.hero-weight b.tbd { font-size: 3rem; color: var(--muted) }
+.hero-weight.done b { color: var(--accent) }
+.hero-line { margin: 10px 0 0; font-size: 1rem; color: var(--ink); max-width: 34ch }
+.hero-line span + span { color: var(--muted) }
+.hero-go { width: 100%; min-height: 56px; margin-top: 16px; font-size: 1.05rem; border-radius: 16px }
+
+/* ---- tally: one mark per set ---- */
+.tally { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px }
+.tg { display: inline-flex; gap: 3px }
+.tg i { width: 9px; height: 22px; border-radius: 2px; background: var(--surface-3) }
+.tg i.on { background: var(--accent) }
+.tg i.now { background: transparent; box-shadow: inset 0 0 0 2px var(--accent) }
+.tally-note { margin: 8px 0 0; color: var(--muted); font-size: .88rem }
+
+/* ---- day tabs: words, not pills ---- */
+.chips-row { gap: 20px; margin: 22px -16px 0; padding: 0 16px; border-bottom: 1px solid var(--line) }
+.day { background: none; border-radius: 0; padding: 4px 0 10px; color: var(--muted); position: relative }
+.day b { font: 800 1.45rem/1 var(--f-display) }
+.day[aria-pressed="true"] { background: none; color: var(--ink) }
+.day[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; border-radius: 2px; background: var(--accent) }
+.day .nx { top: 2px; inset-inline-end: -8px }
+.day .dr { display: none }
+.workout-settings { background: none; border: 0; border-radius: 0; margin-top: 4px }
+.workout-settings summary { padding: 10px 0; font: 600 .85rem var(--f-body) }
+.workout-settings .workout-tools { padding: 0 0 12px }
+
+/* ---- exercise list: rows; only the open one is raised ---- */
+.card.ex { background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; margin: 0 }
+.card.ex.open { background: var(--surface); border: 0; border-radius: var(--r); margin: 8px -8px }
+.card.ex.done:not(.open) .ex-name { color: var(--muted) }
+.ex-head { grid-template-columns: 44px 1fr auto auto; gap: 12px; padding: 14px 0 }
+.card.ex.open .ex-head { padding: 14px 12px 12px }
+.ex .ico { width: 44px; height: 44px; border-radius: 12px; background: var(--surface-2) }
+.card.ex.open .ico { background: var(--surface-3) }
+.ex .ico svg { width: 26px; height: 26px }
+.ex .ex-name { font: 700 1.02rem/1.25 var(--f-body) }
+.ex-desc { margin: 2px 0 0; font-size: .83rem; color: var(--muted); line-height: 1.35 }
+.ex-desc .best { color: var(--gold) }
+.ex-count { font: 800 1.35rem/1 var(--f-display); color: var(--muted) }
+.ex-count.complete { color: var(--accent) }
+.exercise-toggle { width: 32px; height: 32px; background: none; color: var(--muted) }
+.exercise-body { border-top: 1px solid var(--line); padding: 0 12px 14px }
+.set-base-btn { background: var(--surface-2) }
+.last-box { background: var(--bg) }
+.suggest { background: var(--bg); border-color: var(--line) }
+.suggest.up { background: var(--soft); border-color: transparent }
+.lchip { background: var(--surface-2); border-color: transparent }
+.lchip.top { border-color: transparent; box-shadow: inset 0 -2px 0 var(--gold) }
+.sets .cols { font: 600 .72rem var(--f-body) }
+.fld input { background: var(--bg); font: 800 1.35rem var(--f-display) }
+.set.done .fld input { background: var(--soft) }
+.chk { border-color: var(--surface-3) }
+
+/* ---- workout bar: iron, lime only where it's live ---- */
+.session-dock { background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0,0,0,.55) }
+.session-dock .dock-info { color: var(--ink) }
+.dock-info small { opacity: 1; color: var(--muted) }
+.session-dock.resting .dock-sub { color: var(--accent); font: 800 1rem var(--f-display) }
+.session-dock .dock-finish { background: var(--surface-2); color: var(--ink) }
+.focus-btn { background: var(--accent); color: var(--accent-ink) }
+.dock-rest { background: var(--surface-2); color: var(--ink) }
+
+/* ---- tabs bar ---- */
+.bar { background: rgba(21,22,25,.94) }
+.nb { font: 600 .72rem var(--f-body) }
+.nav-ind { background: var(--surface-2) }
+
+/* ---- shared surfaces ---- */
+.card { background: var(--surface); border: 0 }
+.stat { background: var(--surface); border: 0 }
+.stat .n { font-family: var(--f-display) }
+.pill { background: var(--surface-2); color: var(--ink) }
+.qpill { background: var(--surface); border: 0 }
+.qpill b { font: 700 .92rem var(--f-body) }
+.qpill.on { background: var(--soft) }
+.f-title { font: 900 clamp(2.4rem, 11vw, 3.2rem)/.95 var(--f-display) }
+.f-time, .f-stepper input { font-family: var(--f-display) }
+.f-eyebrow { font: 600 .85rem var(--f-body) }
+.wk b, .streak b, .chart-head b, .pr-row .v { font-family: var(--f-display) }
+.wk b, .streak b { font-size: 1.6rem }
+.toast-act { color: #4f6b00 }

@@ -4,7 +4,11 @@ A mobile workout, body measurement, and meal tracker. Workout history and drafts
 
 ## Design
 
-The app uses one dark "athletic" look: near-black background, graphite cards and a lime accent. All colours are tokens at the top of `css/app.css`. The design is dark only, so there is no light/dark switch.
+Dark, built from gym materials: rubber-mat charcoal background, iron surfaces, chalk-white text and one lime accent. Lime only marks something done, next or live. Plate colours follow the competition code (red 25, blue 20, yellow 15, green 10, white 5) and appear only in plate graphics. Headings and numbers use Big Shoulders Display and text uses Archivo, with IBM Plex Sans Arabic for Arabic. There are no all-caps labels.
+
+The Train tab opens with the bar loaded for your next set. Below it, a tally shows one mark per set. Only the exercise you're working on is raised as a panel.
+
+All colours are tokens at the top of `css/app.css`. The design is dark only.
 
 ## Preview
 

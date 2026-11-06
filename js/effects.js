@@ -118,3 +118,38 @@ function fxLoop() {
   if (fxParts.length) fxRaf = requestAnimationFrame(fxLoop);
   else { fxRaf = 0; c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height); }
 }
+
+// A barbell loaded for `weight` (20 kg bar), plates in competition colours.
+// Non-barbell lifts get a dumbbell. Weight 0 shows the empty bar.
+var PLATE_STYLE = { 25: ["--p25", 96, 20], 20: ["--p20", 88, 18], 15: ["--p15", 76, 16], 10: ["--p10", 62, 14], 5: ["--p5", 46, 11], 2.5: ["--psmall", 34, 8], 1.25: ["--psmall", 28, 7] };
+function barbellViz(weight, barbell) {
+  var W = 340, H = 104, cy = H / 2, out = [];
+  if (barbell) {
+    var plates = weight > 20 ? platesFor(weight, 20) : [];
+    var gap = 1.5, total = plates.reduce(function (a, p) { return a + PLATE_STYLE[p][2] + gap; }, 0);
+    var room = 92, k = total > room ? room / total : 1;
+    out.push('<rect class="bv-bar" x="14" y="' + (cy - 3) + '" width="' + (W - 28) + '" height="6" rx="3"/>');
+    out.push('<rect class="bv-collar" x="104" y="' + (cy - 9) + '" width="7" height="18" rx="2"/><rect class="bv-collar" x="' + (W - 111) + '" y="' + (cy - 9) + '" width="7" height="18" rx="2"/>');
+    out.push('<rect class="bv-knurl" x="122" y="' + (cy - 3) + '" width="' + (W - 244) + '" height="6"/>');
+    [-1, 1].forEach(function (side) {
+      var x = side < 0 ? 102 : W - 102;
+      plates.forEach(function (p) {
+        var st = PLATE_STYLE[p], w = st[2] * k, hh = st[1];
+        var px = side < 0 ? x - w : x;
+        out.push('<rect class="bv-plate" style="fill:var(' + st[0] + ')" x="' + px.toFixed(1) + '" y="' + (cy - hh / 2) + '" width="' + w.toFixed(1) + '" height="' + hh + '" rx="2"/>');
+        x += side * (w + gap * k);
+      });
+    });
+  } else {
+    // dumbbell
+    out.push('<rect class="bv-bar" x="128" y="' + (cy - 4) + '" width="84" height="8" rx="4"/>');
+    [[104, 24], [212, 24]].forEach(function (b) { out.push('<rect class="bv-head" x="' + b[0] + '" y="' + (cy - 26) + '" width="' + b[1] + '" height="52" rx="7"/>'); });
+  }
+  var plates2 = barbell && weight > 20 ? platesFor(weight, 20) : [];
+  var label = barbell ? (plates2.length ? "Bar loaded with " + plates2.join(" + ") + " kg on each side" : "Empty 20 kg bar") : "Dumbbell";
+  var box = h("div", { class: "bar-viz" });
+  box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img"></svg>';
+  box.firstChild.setAttribute("aria-label", label);
+  box.firstChild.innerHTML = out.join("");
+  return box;
+}

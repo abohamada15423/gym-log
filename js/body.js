@@ -32,7 +32,7 @@ function renderWeekCard() {
   var cutting = goals().kg <= ((state.body.filter(function (b) { return b.kg != null; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0] || {}).kg || Infinity);
   var r1 = function (x) { return mbFmt(Math.round(x * 10) / 10); }, r0 = function (x) { return Math.round(x).toLocaleString(); };
   return h("div", { class: "card" }, [
-    h("div", { class: "chart-head" }, [h("div", {}, [h("small", { text: "This week · from " + mbDay(ws) }), h("br"), h("b", { text: "Compared with last week" })])]),
+    h("div", { class: "chart-head" }, [h("div", {}, [h("small", { text: "Since " + mbDay(ws) }), h("br"), h("b", { text: "Against last week" })])]),
     h("div", { class: "wk" }, [
       cell("Workouts", cur.workouts, prev.workouts, r0, "", true),
       cell("Sets", cur.sets, prev.sets, r0, "", true),
@@ -109,7 +109,7 @@ function openRecordsModal() {
   var close = h("button", { class: "btn ghost sm", type: "button", text: "Close" });
   close.onclick = closeModal;
   var prs = personalRecords();
-  box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Personal Records" }), close]));
+  box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Personal records" }), close]));
   var list = h("div", {});
   prs.forEach(function (p, i) { var r = prRow(p); r.style.setProperty("--d", i); list.appendChild(r); });
   box.appendChild(list);
@@ -138,11 +138,11 @@ var BODY_METRICS = [
 var bodyMetric = "kg";
 
 function renderBody(root) {
-  root.appendChild(h("h2", { text: "This Week" }));
+  root.appendChild(h("h2", { text: "This week" }));
   root.appendChild(renderWeekCard());
-  root.appendChild(h("h2", { text: "Training Calendar" }));
+  root.appendChild(h("h2", { text: "Training calendar" }));
   root.appendChild(renderCalendar());
-  root.appendChild(h("h2", { text: "Personal Records" }));
+  root.appendChild(h("h2", { text: "Personal records" }));
   root.appendChild(renderRecordsCard());
   root.appendChild(renderMuscleCard(!!fx.enter));
   var sorted = state.body.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
@@ -191,12 +191,12 @@ function renderBody(root) {
   }
   root.appendChild(tcard);
 
-  root.appendChild(h("h2", { text: "Log Check-in" }));
+  root.appendChild(h("h2", { text: "Log a check-in" }));
   var f = { date: h("input", { type: "date", value: today() }) };
   BODY_METRICS.forEach(function (m) {
     f[m.k] = h("input", { type: "text", inputmode: "decimal", placeholder: m.k === "kg" ? "e.g. 88.5" : m.unit });
   });
-  var add = h("button", { class: "btn", text: "Save Check-in" });
+  var add = h("button", { class: "btn", text: "Save check-in" });
   add.onclick = function () {
     var entry = { date: f.date.value || today(), note: "" }, any = false, bad = null;
     BODY_METRICS.forEach(function (m) {

@@ -11,7 +11,7 @@ function renderPlan(root) {
   renderPrograms(root);
   var G = goals();
   var startEntry = state.body.filter(function (b) { return b.kg != null; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0];
-  root.appendChild(h("h2", { text: "Your Goals" }));
+  root.appendChild(h("h2", { text: "Your goals" }));
   function goalField(label, key, unit, min, max) {
     var inp = h("input", { type: "text", inputmode: "decimal", value: String(G[key]), "aria-label": label + " (" + unit + ")" });
     inp.onchange = function () {
@@ -29,7 +29,7 @@ function renderPlan(root) {
     h("div", { class: "note", text: "Changes save straight away and update the Body and Meals tabs." })
   ]));
 
-  root.appendChild(h("h2", { text: "Daily Habits" }));
+  root.appendChild(h("h2", { text: "Daily habits" }));
   var hcard = h("div", { class: "card" });
   habitList().forEach(function (hb) {
     var del = h("button", { class: "btn ghost sm", type: "button", text: "Remove" });
@@ -51,7 +51,7 @@ function renderPlan(root) {
   var amountRow = h("div", { class: "grid2" }, [h("label", {}, ["Daily goal", hf.target]), h("label", {}, ["Per tap", hf.step]), h("label", {}, ["Unit", hf.unit])]);
   amountRow.hidden = true;
   hf.type.onchange = function () { amountRow.hidden = hf.type.value !== "count"; };
-  var hadd = h("button", { class: "btn", type: "button", text: "Add Habit" });
+  var hadd = h("button", { class: "btn", type: "button", text: "Add habit" });
   hadd.onclick = function () {
     var nm = hf.name.value.trim();
     if (!nm) { toast("Name the habit"); hf.name.focus(); return; }
@@ -85,7 +85,7 @@ function renderPlan(root) {
   root.appendChild(h("h2", { text: "Language" }));
   root.appendChild(langRow);
 
-  root.appendChild(h("h2", { text: "Alerts & Screen" }));
+  root.appendChild(h("h2", { text: "Alerts and screen" }));
   function toggleRow(title, sub, on) {
     var sw = h("span", { class: "sw" + (on ? " on" : "") });
     var b = h("button", { class: "qpill" + (on ? " on" : ""), type: "button" }, [h("div", {}, [h("b", { text: title }), h("small", { text: sub })]), sw]);
@@ -118,7 +118,7 @@ function renderPlan(root) {
   root.appendChild(h("div", { style: "display:flex;flex-direction:column;gap:8px" }, [nBtn, wBtn2,
     h("div", { class: "note", text: "On iPhone the alert arrives while the app is open or just backgrounded. Keeping the screen on during rest is the most reliable way to hear the beep." })]));
 
-  root.appendChild(h("h2", { text: "Backup & Restore (Keep Your Data Safe)" }));
+  root.appendChild(h("h2", { text: "Backup" }));
   var expBtn = h("button", { class: "btn", text: "⬇ Export Backup (JSON)" });
   expBtn.onclick = exportBackup;
   var fileIn = h("input", { type: "file", accept: ".json", style: "display:none" });
@@ -144,7 +144,7 @@ function renderPlan(root) {
     h("div", { class: "note", text: state.lastBackup ? "Last backup: " + mbDay(state.lastBackup) + " (" + (state.backupCount || 0) + " workouts)." : "No backup yet. Your data only lives on this device." })
   ]));
 
-  root.appendChild(h("h2", { text: "Progression Rules" }));
+  root.appendChild(h("h2", { text: "How to progress" }));
   var ul = h("ul", { class: "rules" });
   [
     "Stop each set 1–2 reps before failure.",
