@@ -1108,6 +1108,19 @@
       cursor: pointer
     }
 
+    .toast-act {
+      margin-left: 12px;
+      background: none;
+      border: 0;
+      color: var(--accent);
+      font: inherit;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      padding: 6px 2px;
+      cursor: pointer
+    }
+
     .toast {
       position: fixed;
       left: 50%;
@@ -2417,6 +2430,7 @@
           if (k === "text") e.textContent = attrs[k];
           else if (k === "class") e.className = attrs[k];
           else if (k === "html") e.innerHTML = attrs[k];
+          else if (typeof attrs[k] === "function") e[k] = attrs[k];
           else e.setAttribute(k, attrs[k]);
         }
         (kids || []).forEach(function (c) {
@@ -2428,9 +2442,25 @@
       function fmt(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
       function num(v) { var n = parseFloat(String(v).replace(",", ".")); return isFinite(n) ? n : null; }
       function uid() { return String(Date.now()) + Math.random().toString(36).slice(2, 6); }
-      function toast(t, ms) {
+      function toast(t, ms, action) {
         var e = $("toast"); e.hidden = false; e.textContent = t;
+        if (action) {
+          var b = h("button", { class: "toast-act", type: "button", text: action.label });
+          b.onclick = function () { clearTimeout(toast._t); e.hidden = true; action.run(); };
+          e.appendChild(b);
+        }
         clearTimeout(toast._t); toast._t = setTimeout(function () { e.hidden = true; }, ms || 1800);
+      }
+      // Remove an entry from state[listName] and offer a few seconds to put it back where it was.
+      function removeWithUndo(listName, item, label) {
+        var i = state[listName].indexOf(item); if (i < 0) return;
+        state[listName].splice(i, 1); save(); render();
+        toast(label + " removed", 6000, {
+          label: "Undo", run: function () {
+            var a = state[listName]; if (a.indexOf(item) > -1) return;
+            a.splice(Math.min(i, a.length), 0, item); save(); render(); toast("Restored");
+          }
+        });
       }
 
       /* ---------- MOTION HELPERS ---------- */
@@ -2482,21 +2512,26 @@
           var raw = localStorage.getItem("gymlog-v1");
           if (raw) {
             var s = JSON.parse(raw);
-            if (s && Array.isArray(s.sessions)) {
-              state = Object.assign(fresh(), s);
-              state.drafts = state.drafts || {};
-              state.baselines = state.baselines || {};
-              state.habits = state.habits || {};
-              state.customLib = state.customLib || [];
-              sessionDates = state.sessionDates || {};
-              state.programId = state.programId || "split4";
-              state.notify = !!state.notify; state.keepAwake = state.keepAwake !== false;
-            }
+            if (s && Array.isArray(s.sessions)) adopt(s);
           }
         } catch (e) { }
+        applyLoaded();
+      }
+      // Make saved or imported data safe to use: fill in anything older versions did not store.
+      function adopt(s) {
+        state = Object.assign(fresh(), s);
+        ["sessions", "body", "food", "customLib"].forEach(function (k) { if (!Array.isArray(state[k])) state[k] = []; });
+        ["drafts", "baselines", "habits"].forEach(function (k) { if (!state[k] || typeof state[k] !== "object") state[k] = {}; });
+        sessionDates = state.sessionDates || {};
+        state.programId = state.programId || "split4";
+        state.notify = !!state.notify; state.keepAwake = state.keepAwake !== false;
+      }
+      function applyLoaded() {
         if (state.theme) document.documentElement.setAttribute("data-theme", state.theme);
+        else document.documentElement.removeAttribute("data-theme");
         applyProgram();
         dayId = nextDay();
+        expandedExercise = null;
       }
 
       /* ---------- PROGRAM MANAGEMENT ---------- */
@@ -3992,7 +4027,7 @@
           var dn = (s.dayName ? { name: s.dayName } : DAYS.filter(function (x) { return x.id === s.day; })[0]);
           var vol = 0; for (var k in s.sets) s.sets[k].forEach(function (p) { vol += p[0] * p[1]; });
           var del = h("button", { class: "btn ghost sm", text: "Remove" });
-          del.onclick = function () { state.sessions = state.sessions.filter(function (x) { return x.id !== s.id; }); save(); render(); };
+          del.onclick = function () { removeWithUndo("sessions", s, (dn ? dn.name : "Workout") + " · " + s.date); };
           list.appendChild(h("div", { class: "item" }, [
             h("div", {}, [h("div", { style: "font-weight:700", text: dn ? dn.name : s.day }), h("div", { class: "d", text: s.date })]),
             h("div", { class: "row-r" }, [h("div", { class: "v", text: Math.round(vol).toLocaleString() + " kg" }), del])
@@ -4474,7 +4509,7 @@
         sorted.slice().reverse().forEach(function (b) {
           var parts = []; if (b.kg != null) parts.push(b.kg + " kg"); if (b.waist != null) parts.push(b.waist + " cm"); if (b.fat != null) parts.push(b.fat + "% fat");
           var del = h("button", { class: "btn ghost sm", text: "Remove" });
-          del.onclick = function () { var i = state.body.indexOf(b); if (i > -1) state.body.splice(i, 1); save(); render(); };
+          del.onclick = function () { removeWithUndo("body", b, "Check-in · " + b.date); };
           list.appendChild(h("div", { class: "item" }, [
             h("div", {}, [h("div", { text: b.note || "Check-in" }), h("div", { class: "d", text: b.date })]),
             h("div", { class: "row-r" }, [h("div", { class: "v", text: parts.join(" · ") }), del])
@@ -4541,7 +4576,7 @@
         if (!rows.length) list.appendChild(h("div", { class: "empty", text: "Nothing logged today yet." }));
         rows.forEach(function (r) {
           var del = h("button", { class: "btn ghost sm", text: "Remove" });
-          del.onclick = function () { state.food = state.food.filter(function (x) { return x.id !== r.id; }); save(); render(); };
+          del.onclick = function () { removeWithUndo("food", r, r.name); };
           list.appendChild(h("div", { class: "item" }, [
             h("div", { text: r.name }),
             h("div", { class: "row-r" }, [h("div", { class: "v", text: r.kcal + " kcal · " + r.p + "g P" }), del])
@@ -4615,12 +4650,14 @@
           reader.onload = function (ev) {
             try {
               var parsed = JSON.parse(ev.target.result);
-              if (parsed && Array.isArray(parsed.sessions)) {
-                state = Object.assign(fresh(), parsed); sessionDates = state.sessionDates || {}; save(); render(); toast("Backup restored!");
-              }
+              if (!parsed || !Array.isArray(parsed.sessions)) { toast("That file isn't a Gym Log backup"); return; }
+              var n = parsed.sessions.length, m = Array.isArray(parsed.body) ? parsed.body.length : 0;
+              if (!confirm("Replace everything on this device with this backup?\n\nBackup: " + n + " workout" + (n === 1 ? "" : "s") + ", " + m + " check-in" + (m === 1 ? "" : "s") + ".\nThis device: " + state.sessions.length + " workouts, " + state.body.length + " check-ins.\n\nExport a backup first if you want to keep what's here.")) return;
+              adopt(parsed); applyLoaded(); save(); render(); toast("Backup restored!");
             } catch (err) { toast("Invalid backup file"); }
           };
           reader.readAsText(file);
+          fileIn.value = "";
         };
         root.appendChild(h("div", { class: "card grid2" }, [expBtn, impBtn, fileIn]));
 

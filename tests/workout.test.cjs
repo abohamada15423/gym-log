@@ -124,3 +124,49 @@ test('exercise cards can be expanded and the continue action opens the next exer
   a.doc.querySelector('.continue-btn').click();
   assert.equal(a.doc.querySelectorAll('.ex')[0].querySelector('.exercise-body').hidden, false);
 });
+
+test('tapping an exercise name opens its form dialog, and the baseline dialog closes with ✕', t => {
+  const a = app(t);
+  a.doc.querySelector('.ex-name').click();
+  assert.equal(a.doc.getElementById('modal').hidden, false);
+  assert.match(a.doc.querySelector('#mbox .mtitle').textContent, /Bench press/);
+  a.click('Close');
+  a.click('＋ Set Last KG');
+  assert.equal(a.doc.getElementById('modal').hidden, false);
+  a.click('✕');
+  assert.equal(a.doc.getElementById('modal').hidden, true);
+});
+
+test('removing a workout can be undone and keeps its place', t => {
+  const sessions = [
+    { id: 'a', day: 'push', date: '2026-10-01', sets: { 'Bench press': [[60, 6]] } },
+    { id: 'b', day: 'pull', date: '2026-10-02', sets: { 'Barbell row': [[50, 8]] } },
+    { id: 'c', day: 'legs', date: '2026-10-03', sets: { Squat: [[80, 5]] } }
+  ];
+  const a = app(t, { sessions });
+  const removeB = [...a.doc.querySelectorAll('.item')].find(i => i.textContent.includes('2026-10-02')).querySelector('button');
+  removeB.click();
+  assert.deepEqual(a.state().sessions.map(s => s.id), ['a', 'c']);
+  a.click('Undo');
+  assert.deepEqual(a.state().sessions.map(s => s.id), ['a', 'b', 'c']);
+});
+
+test('importing a backup asks first, then restores and normalises it', async t => {
+  const a = app(t, { sessions: [{ id: 'x', day: 'push', date: '2026-10-01', sets: {} }] });
+  a.doc.getElementById('t-plan').click();
+  const fileIn = a.doc.querySelector('input[type=file]');
+  const backup = { sessions: [{ id: 'y', day: 'pull', date: '2026-10-05', sets: {} }, { id: 'z', day: 'legs', date: '2026-10-06', sets: {} }], drafts: null };
+  const pick = async answer => {
+    let asked = '';
+    a.w.confirm = msg => { asked = msg; return answer; };
+    Object.defineProperty(fileIn, 'files', { configurable: true, value: [new a.w.File([JSON.stringify(backup)], 'b.json')] });
+    fileIn.dispatchEvent(new a.w.Event('change'));
+    await new Promise(r => setTimeout(r, 50));
+    return asked;
+  };
+  assert.match(await pick(false), /2 workouts/);
+  assert.deepEqual(a.state().sessions.map(s => s.id), ['x']);
+  await pick(true);
+  assert.deepEqual(a.state().sessions.map(s => s.id), ['y', 'z']);
+  assert.deepEqual(a.state().drafts, {});
+});
