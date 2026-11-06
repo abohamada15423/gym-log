@@ -1123,6 +1123,22 @@
     .chart-head .up { color: var(--ok) }
     .chart-head .down { color: var(--warn) }
 
+    .suggest { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 9px 11px; border-radius: 12px; background: var(--soft); font-size: .86rem; line-height: 1.3 }
+    .suggest.up { background: var(--ok-soft) }
+    .suggest b { display: block; font-size: .95rem }
+    .suggest small { color: var(--muted) }
+    .suggest .btn { flex: none; padding: 8px 12px; min-height: 0; width: auto }
+    .item.tap { cursor: pointer }
+    .hist-month { margin: 6px 0 -2px; font: 700 .72rem var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+    .hist { border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2) }
+    .hist summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 11px 12px }
+    .hist summary::-webkit-details-marker { display: none }
+    .hist summary small { display: block; color: var(--muted); font-weight: 600 }
+    .hist summary .v { font-weight: 700; white-space: nowrap }
+    .hist-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px }
+    .hist-ex { display: flex; justify-content: space-between; gap: 10px; font-size: .88rem; border-top: 1px solid var(--line); padding-top: 6px }
+    .hist-ex span:last-child { color: var(--muted); text-align: right; font-family: var(--f-mono, monospace); font-size: .8rem }
+
     .toast-act {
       margin-left: 12px;
       background: none;
@@ -2691,6 +2707,38 @@
         return { sets: lastSets || [], date: lastDate, pr: bestSet };
       }
 
+      // "8" -> {lo:8, hi:8}; "6–8" -> {lo:6, hi:8}; timed targets like "30s" -> null
+      function repRange(t) {
+        var m = /^\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*$/.exec(String(t || ""));
+        if (!m) return null;
+        var lo = +m[1], hi = m[2] ? +m[2] : lo;
+        return { lo: Math.min(lo, hi), hi: Math.max(lo, hi) };
+      }
+      // Double progression: hit the top of the range on every set -> add 2.5 kg next time.
+      function suggestNext(exName, setsCount, repsTarget) {
+        var range = repRange(repsTarget); if (!range) return null;
+        var last = null;
+        for (var i = state.sessions.length - 1; i >= 0; i--) {
+          var ss = state.sessions[i].sets && state.sessions[i].sets[exName];
+          if (ss && ss.length && (!last || state.sessions[i].date > last.date)) last = { date: state.sessions[i].date, sets: ss };
+        }
+        if (!last) return null;
+        var work = last.sets.slice(0, setsCount);
+        var base = Math.min.apply(null, work.map(function (p) { return p[0]; }));
+        if (!(base > 0)) return null;
+        var allTop = work.length >= setsCount && work.every(function (p) { return p[1] >= range.hi; });
+        if (allTop) return { up: true, w: Math.round((base + 2.5) * 100) / 100, r: range.lo, why: "You hit " + range.hi + "+ reps on all " + setsCount + " sets last time" };
+        return { up: false, w: base, why: "Get " + range.hi + " reps on all " + setsCount + " sets, then add 2.5 kg" };
+      }
+      function sessionName(s) {
+        if (s.dayName) return s.dayName;
+        var d = DAYS.filter(function (x) { return x.id === s.day; })[0];
+        return d ? d.name : (s.day || "Workout");
+      }
+      function sessionVolume(s) {
+        var v = 0; for (var k in (s.sets || {})) s.sets[k].forEach(function (p) { v += p[0] * p[1]; }); return v;
+      }
+
       function nextDay() {
         var ids = DAYS.map(function (d) { return d.id; });
         for (var i = state.sessions.length - 1; i >= 0; i--) {
@@ -3554,6 +3602,45 @@
         $("modal").hidden = false;
       }
 
+      /* ---------- WORKOUT HISTORY ---------- */
+      function openHistoryModal(openId) {
+        var box = $("mbox"); box.textContent = "";
+        var close = h("button", { class: "btn ghost sm", type: "button", text: "Close" });
+        close.onclick = closeModal;
+        var all = state.sessions.map(function (s, i) { return { s: s, i: i }; })
+          .sort(function (a, b) { return a.s.date === b.s.date ? b.i - a.i : (a.s.date < b.s.date ? 1 : -1); });
+        var totalVol = all.reduce(function (t, x) { return t + sessionVolume(x.s); }, 0);
+        box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Workout History" }), close]));
+        box.appendChild(h("div", { class: "grid2" }, [
+          h("div", { class: "stat" }, [h("div", { class: "k", text: "Workouts" }), h("div", { class: "n", text: String(all.length) })]),
+          h("div", { class: "stat" }, [h("div", { class: "k", text: "Total volume" }), h("div", { class: "n" }, [Math.round(totalVol).toLocaleString(), h("small", { text: "kg" })])])
+        ]));
+        if (!all.length) box.appendChild(h("div", { class: "empty", text: "No completed sessions yet." }));
+        var month = "", target = null;
+        all.forEach(function (x) {
+          var s = x.s, d = ymdParse(s.date), m = d ? MB_MON[d.getMonth()] + " " + d.getFullYear() : "Other";
+          if (m !== month) { month = m; box.appendChild(h("div", { class: "hist-month", text: m })); }
+          var names = Object.keys(s.sets || {}), nSets = names.reduce(function (t, n) { return t + s.sets[n].length; }, 0);
+          var body = h("div", { class: "hist-body" });
+          names.forEach(function (n) {
+            body.appendChild(h("div", { class: "hist-ex" }, [h("span", { text: n }), h("span", { text: s.sets[n].map(function (p) { return mbFmt(p[0]) + "×" + p[1]; }).join("  ") })]));
+          });
+          var del = h("button", { class: "btn ghost sm", type: "button", text: "Remove workout" });
+          del.onclick = function () { closeModal(); removeWithUndo("sessions", s, sessionName(s) + " · " + s.date); };
+          body.appendChild(del);
+          var det = h("details", { class: "hist" }, [
+            h("summary", {}, [h("div", {}, [h("b", { text: sessionName(s) }), h("small", { text: (d ? mbDay(s.date) : s.date) + " · " + names.length + " exercises · " + nSets + " sets" })]),
+              h("span", { class: "v", text: Math.round(sessionVolume(s)).toLocaleString() + " kg" })]),
+            body
+          ]);
+          if (s.id === openId) { det.open = true; target = det; }
+          box.appendChild(det);
+        });
+        $("modal").hidden = false;
+        if (target && target.scrollIntoView) target.scrollIntoView({ block: "nearest" });
+        close.focus();
+      }
+
       /* ---------- DAY EDITOR & EXERCISE PICKER ---------- */
       function openDayEditor(did) {
         ensureCustom();
@@ -3937,6 +4024,27 @@
               setNow
             ]));
           }
+          var sug = suggestNext(name, setsCount, repsTarget);
+          if (sug) {
+            var useBtn = null;
+            if (sug.up) {
+              useBtn = h("button", { class: "btn sm", type: "button", text: "Use " + sug.w + " kg" });
+              useBtn.onclick = function () {
+                for (var i = 0; i < setsCount; i++) {
+                  exDraft[i] = exDraft[i] || { w: "", r: "", done: false };
+                  if (exDraft[i].done) continue;
+                  exDraft[i].w = String(sug.w);
+                  exDraft[i].r = String(sug.r);
+                }
+                state.drafts[dk(d.id)] = draft; save(); render();
+                toast(name + ": " + sug.w + " kg × " + sug.r + " filled");
+              };
+            }
+            lastBox.appendChild(h("div", { class: "suggest" + (sug.up ? " up" : "") }, [
+              h("div", {}, [h("b", { text: sug.up ? "▲ Next: " + sug.w + " kg × " + sug.r : "Stay at " + sug.w + " kg" }), h("small", { text: sug.why })]),
+              useBtn
+            ]));
+          }
           exerciseBody.appendChild(lastBox);
 
           /* --- SETS TABLE --- */
@@ -4114,15 +4222,21 @@
         var list = h("div", { class: "card list" }), recent = state.sessions.slice(-6).reverse();
         if (!recent.length) list.appendChild(h("div", { class: "empty", text: "No completed sessions yet." }));
         recent.forEach(function (s) {
-          var dn = (s.dayName ? { name: s.dayName } : DAYS.filter(function (x) { return x.id === s.day; })[0]);
-          var vol = 0; for (var k in s.sets) s.sets[k].forEach(function (p) { vol += p[0] * p[1]; });
           var del = h("button", { class: "btn ghost sm", text: "Remove" });
-          del.onclick = function () { removeWithUndo("sessions", s, (dn ? dn.name : "Workout") + " · " + s.date); };
-          list.appendChild(h("div", { class: "item" }, [
-            h("div", {}, [h("div", { style: "font-weight:700", text: dn ? dn.name : s.day }), h("div", { class: "d", text: s.date })]),
-            h("div", { class: "row-r" }, [h("div", { class: "v", text: Math.round(vol).toLocaleString() + " kg" }), del])
-          ]));
+          del.onclick = function (ev) { ev.stopPropagation(); removeWithUndo("sessions", s, sessionName(s) + " · " + s.date); };
+          var it = h("div", { class: "item tap", role: "button", tabindex: "0", "aria-label": "Show " + sessionName(s) + " on " + s.date }, [
+            h("div", {}, [h("div", { style: "font-weight:700", text: sessionName(s) }), h("div", { class: "d", text: s.date })]),
+            h("div", { class: "row-r" }, [h("div", { class: "v", text: Math.round(sessionVolume(s)).toLocaleString() + " kg" }), del])
+          ]);
+          it.onclick = function () { openHistoryModal(s.id); };
+          it.onkeydown = function (ev) { if ((ev.key === "Enter" || ev.key === " ") && ev.target === it) { ev.preventDefault(); openHistoryModal(s.id); } };
+          list.appendChild(it);
         });
+        if (state.sessions.length) {
+          var allBtn = h("button", { class: "btn ghost", type: "button", text: "View all " + state.sessions.length + " workout" + (state.sessions.length === 1 ? "" : "s") });
+          allBtn.onclick = function () { openHistoryModal(null); };
+          list.appendChild(allBtn);
+        }
         root.appendChild(list);
       }
 

@@ -207,3 +207,36 @@ test('body tab charts weight against the goal; exercise dialog charts best estim
   assert.equal(chart.querySelectorAll('circle').length, 2);
   assert.ok(chart.querySelector('.c-goal'));
 });
+
+test('suggests +2.5 kg after hitting top reps on every set, otherwise holds the weight', t => {
+  const four = (w, r) => [[w, r], [w, r], [w, r], [w, r]];
+  const up = app(t, { sessions: [{ id: '1', day: 'old', date: '2026-10-01', sets: { 'Bench press': four(60, 6) } }] });
+  const card = up.doc.querySelector('.ex');
+  assert.match(card.querySelector('.suggest').textContent, /Next: 62\.5 kg × 6/);
+  up.click('Use 62.5 kg');
+  const sets = up.state().drafts.push['Bench press'];
+  assert.deepEqual(sets.map(s => s.w), ['62.5', '62.5', '62.5', '62.5']);
+
+  const hold = app(t, { sessions: [{ id: '1', day: 'old', date: '2026-10-01', sets: { 'Bench press': [[60, 6], [60, 6], [60, 5], [60, 4]] } }] });
+  assert.match(hold.doc.querySelector('.suggest').textContent, /Stay at 60 kg/);
+  assert.equal([...hold.doc.querySelectorAll('.suggest button')].length, 0);
+});
+
+test('workout history lists every session newest first with its sets', t => {
+  const sessions = [];
+  for (let i = 1; i <= 8; i++) sessions.push({ id: 's' + i, day: 'old', dayName: 'Day ' + i, date: `2026-10-${String(i).padStart(2, '0')}`, sets: { Squat: [[80 + i, 5]] } });
+  const a = app(t, { sessions });
+  assert.equal(a.doc.querySelectorAll('.item.tap').length, 6);
+  a.click('View all 8 workouts');
+  const items = a.doc.querySelectorAll('#mbox details.hist');
+  assert.equal(items.length, 8);
+  assert.match(items[0].textContent, /Day 8.*88×5/);
+  a.click('Close');
+  [...a.doc.querySelectorAll('.item.tap')].find(i => i.textContent.includes('2026-10-05')).click();
+  const open = a.doc.querySelector('#mbox details.hist[open]');
+  assert.match(open.textContent, /Day 5/);
+  a.click('Remove workout');
+  assert.equal(a.state().sessions.length, 7);
+  a.click('Undo');
+  assert.equal(a.state().sessions.length, 8);
+});
