@@ -30,6 +30,8 @@ function findPgBin() {
 }
 
 const PG_BIN = findPgBin();
+// CI sets REQUIRE_PG=1 so a missing Postgres fails the run instead of quietly skipping it.
+if (!PG_BIN && process.env.REQUIRE_PG) throw new Error('PostgreSQL not found and REQUIRE_PG is set (set PG_BIN to its bin folder)');
 const dbTest = PG_BIN ? test : test.skip;
 if (!PG_BIN) console.log('# PostgreSQL not found: database tests skipped (set PG_BIN to run them)');
 
