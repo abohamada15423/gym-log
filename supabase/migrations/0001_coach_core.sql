@@ -350,7 +350,7 @@ create policy "coach_notes: coach only" on public.coach_notes for all to authent
 create policy "invites: coach reads own" on public.invites for select to authenticated
   using (coach_id = (select auth.uid()));
 create policy "invites: coach withdraws unused" on public.invites for delete to authenticated
-  using (coach_id = (select auth.uid()) and used_by is null);
+  using (coach_id = (select auth.uid()) and used_at is null);
 
 -- programs and meal plans: the coach writes; the client they are assigned to reads.
 create policy "programs: coach and assigned client read" on public.programs for select to authenticated
@@ -451,8 +451,10 @@ begin
   end loop;
 end $$;
 
--- A client redeems a code: once, before it expires, and not if they already have another coach.
--- A wrong code and an expired one get the same message, so the reply doesn't help anyone guess.
+-- A client redeems a code: once, before it expires, and only if they don't have a coach already.
+-- That last check runs before the code is looked at, and wrong, used and expired codes share one
+-- message, so no reply tells anyone whether a code they guessed is real.
+-- A code counts as used by used_at, which stays set even if the account that used it is deleted.
 create function public.accept_invite(p_code text) returns uuid
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -465,16 +467,15 @@ begin
   if exists (select 1 from public.profiles p where p.id = v_me and p.role = 'coach') then
     raise exception 'Coaches cannot join as clients' using errcode = '42501';
   end if;
+  if exists (select 1 from public.coach_clients cc where cc.client_id = v_me and cc.status <> 'archived') then
+    raise exception 'You already have a coach. Leave them before joining another.' using errcode = 'P0001';
+  end if;
   update public.invites
      set used_by = v_me, used_at = now()
-   where code = upper(btrim(p_code)) and used_by is null and expires_at > now()
+   where code = upper(btrim(p_code)) and used_at is null and expires_at > now()
   returning coach_id into v_coach;
   if v_coach is null then
     raise exception 'This code is wrong or has expired' using errcode = 'P0001';
-  end if;
-  if exists (select 1 from public.coach_clients cc
-             where cc.client_id = v_me and cc.coach_id <> v_coach and cc.status <> 'archived') then
-    raise exception 'You already have a coach. Leave them before joining another.' using errcode = 'P0001';
   end if;
   insert into public.coach_clients as cc (coach_id, client_id, status, started_at)
   values (v_coach, v_me, 'active', now())

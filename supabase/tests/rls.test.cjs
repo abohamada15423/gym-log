@@ -203,6 +203,8 @@ dbTest('a client who has a coach cannot join a second one, and the code stays un
   await assert.rejects(as(alice, 'select public.accept_invite($1)', [other]), /already have a coach/);
   const inv = await db.query('select used_by from public.invites where code = $1', [other]);
   assert.equal(inv.rows[0].used_by, null);
+  // a made-up code gets the same answer, so a client with a coach can't use the reply to test guesses
+  await assert.rejects(as(alice, "select public.accept_invite('ZZZZZZZZZZZZ')"), /already have a coach/);
 });
 
 dbTest('clients see only their own data; their coach reads it; nobody else does', async () => {
@@ -379,11 +381,15 @@ dbTest('pausing keeps access; leaving ends it; only a new invite brings the coac
   assert.equal((await rows(coach2, 'select id from public.workout_sessions')).length, 0);
 });
 
-dbTest('deleting an account removes everything that belongs to it', async () => {
+dbTest('deleting an account removes everything that belongs to it, and the code it used stays used', async () => {
   const carl = await signUp('carl@example.com');
+  const carlsCode = (await rows(coach2, 'select public.create_invite() as code'))[0].code;
+  await as(carl, 'select public.accept_invite($1)', [carlsCode]);
   await upsert(carl, 'workout_sessions', { id: uuid(), client_id: carl.id, date: '2026-11-22', sets: {} });
   await db.query('delete from auth.users where id = $1', [carl.id]);
   const left = await db.query('select count(*)::int as n from public.workout_sessions where client_id = $1', [carl.id]);
   assert.equal(left.rows[0].n, 0);
   assert.equal((await db.query('select count(*)::int as n from public.profiles where id = $1', [carl.id])).rows[0].n, 0);
+  const dan = await signUp('dan@example.com');
+  await assert.rejects(as(dan, 'select public.accept_invite($1)', [carlsCode]), /wrong or has expired/);
 });

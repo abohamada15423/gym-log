@@ -70,7 +70,7 @@ What the tests prove (one test each):
 - every public table has RLS on; `anon` has no table privileges and can't call any function
 - every `security definer` function pins `search_path`
 - signing up creates a client profile; nobody can change their own `role`
-- only coaches create invites; a code works once, expires, and wrong/used/expired codes get one message; coaches can't join as clients; a client with a coach can't join another (and the code stays unused)
+- only coaches create invites; a code works once (even after the account that used it is deleted), expires, and wrong/used/expired codes get one message; coaches can't join as clients; a client with a coach can't join another, the code stays unused, and the reply doesn't reveal whether the code was real
 - clients see only their own data; their coach reads it; other clients and coaches see nothing; nobody (the coach included) writes someone else's data; no hard deletes
 - last-write-wins on `modified_at`: an older edit that arrives later loses; a fast phone clock is clamped; replays change nothing; devices can't set `updated_at`
 - habits are one row per day and settings one row per key, so two devices don't overwrite each other
@@ -81,7 +81,7 @@ What the tests prove (one test each):
 - pausing keeps access, leaving ends it, and only a new invite brings a coach back
 - deleting an account removes its data
 
-The suite was also checked against nine deliberate breakages of the migration (anon access, missing `search_path`, coach editing client comments, writable `read_at`, editable `role`, older edits winning, re-activating archived links, reusable invites, coaches reading other folders). Each one made a test fail.
+The suite was also checked against eleven deliberate breakages of the migration (anon access, missing `search_path`, coach editing client comments, writable `read_at`, editable `role`, older edits winning, re-activating archived links, reusable invites, invites reusable after account deletion, checking the code before the existing coach, coaches reading other folders). Each one made a test fail.
 
 ## Changing the schema later
 
