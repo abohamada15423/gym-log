@@ -66,3 +66,5 @@ When you add a file to `js/`, add a `<script>` tag for it in `index.html` and it
 ## Tests
 
 Run `npm ci`, then `npm test`. The tests exercise the app DOM with jsdom, including date persistence, completion and undo, partial workout saves, input validation, copying previous sets, keyboard cancellation, undoing removals, backup import, editable goals, progress charts, weight suggestions, workout history, food macros and backup reminders. Canvas rendering and visual layout require a browser check.
+
+`npm run test:db` checks the database for the coach version: it runs the Supabase migration on a throwaway local PostgreSQL and tests every permission rule. It needs PostgreSQL 14+ installed and skips otherwise. See [supabase/README.md](supabase/README.md) for the project setup.

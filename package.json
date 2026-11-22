@@ -1,6 +1,12 @@
 {
   "name": "gym-log",
   "private": true,
-  "scripts": { "test": "node --test tests/*.test.cjs" },
-  "devDependencies": { "jsdom": "26.1.0" }
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "test:db": "node --test supabase/tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0",
+    "pg": "8.23.1"
+  }
 }

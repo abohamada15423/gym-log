@@ -54,6 +54,7 @@
 - **Exceptions, on purpose:**
   - `profiles`: primary key `id = auth.users.id`.
   - `client_settings`: one row **per setting**, primary key `(client_id, key)`, so settings edited on two devices don't overwrite each other.
+  - `habit_days`: primary key `(client_id, date)`, so two devices ticking habits on the same day update one row instead of colliding.
   - `coach_clients` and `coach_notes`: primary key `(coach_id, client_id)`.
   - `invites`: primary key `code`.
 - SQL goes in `supabase/migrations/NNNN_name.sql`. Every `security definer` function has `set search_path = ''` and schema-qualified names (`public.x`, `auth.uid()`).
@@ -73,8 +74,8 @@ workout_sessions    id, client_id, date, day_id, day_name, program_id, sets json
                     notes jsonb, note text, modified_at, updated_at, deleted_at
 food_logs           id, client_id, date, name, kcal, p, c, f, modified_at, updated_at, deleted_at
 body_checkins       id, client_id, date, kg, waist, chest, arm, thigh, hips, fat, photo_path, note, modified_at, updated_at, deleted_at
-habit_days          id, client_id, date, data jsonb, modified_at, updated_at, deleted_at        unique(client_id, date)
-client_settings     client_id, key ('goals'|'habit_list'|'my_foods'|'custom_lib'|'baselines'), value jsonb,
+habit_days          client_id, date, data jsonb, modified_at, updated_at, deleted_at            pk(client_id, date)
+client_settings     client_id, key ('goals'|'habit_list'|'my_foods'|'custom_lib'|'baselines'|'custom_program'), value jsonb,
                     modified_at, updated_at                                      pk(client_id, key)
 
 comments            id, client_id, author_id, target_type ('session'|'food_day'|'checkin'|'general'),
@@ -85,61 +86,53 @@ Storage: private bucket `progress`, path `{client_id}/{yyyy-mm-dd}-{uuid}.webp`.
 
 ### الصلاحيات (RLS)
 
-RLS مفعّلة على **كل** جدول. الدوال المساعدة `security definer` وليها `search_path` ثابت:
+**الكود الحقيقي في** [`supabase/migrations/0001_coach_core.sql`](../supabase/migrations/0001_coach_core.sql)، **والاختبارات اللي بتثبت كل قاعدة في** [`supabase/tests/rls.test.cjs`](../supabase/tests/rls.test.cjs). لو القسم ده اختلف مع الكود، الكود هو الصح.
 
-```sql
--- the logged-in user coaches this client (link not archived)
-create function public.is_coach_of(c uuid) returns boolean
-language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.coach_clients
-                 where coach_id = auth.uid() and client_id = c and status <> 'archived') $$;
+القواعد باختصار:
 
--- the logged-in user is a client of this coach
-create function public.is_client_of(co uuid) returns boolean
-language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.coach_clients
-                 where client_id = auth.uid() and coach_id = co and status <> 'archived') $$;
-```
-
+- **RLS شغالة على كل جدول**، و`anon` (الزائر من غير حساب) مالوش أي صلاحية على أي جدول أو دالة.
+- **الدوال المساعدة:** `is_coach_of` و`is_client_of` و`is_coach` و`can_read_progress_path` موجودة في schema اسمها `private`، والـ API مابيعرضهاش. كلها `security definer` و`search_path = ''`.
 - **بيانات الكلاينت** (`workout_sessions`, `food_logs`, `body_checkins`, `habit_days`, `client_settings`):
-  - الكلاينت يقرا ويكتب صفوفه بس: `client_id = auth.uid()` في select و insert و update و delete.
-  - الكابتن **يقرا بس**: `is_coach_of(client_id)` في select بس.
+  - الكلاينت يقرا ويضيف ويعدّل صفوفه بس.
+  - الكابتن **يقرا بس**.
+  - **مفيش مسح نهائي لحد:** المسح بـ `deleted_at` عشان يوصل لكل الأجهزة.
 - **`programs` و `meal_plans`:**
-  - الكابتن له كل الصلاحيات على `coach_id = auth.uid()`.
-  - الكلاينت **يقرا بس**: `client_id = auth.uid()`.
-- **`comments`:** كل واحد يكتب ويعدّل ويمسح **بتاعه بس**:
-  - select: `client_id = auth.uid() or is_coach_of(client_id)`.
-  - insert: `author_id = auth.uid() and (client_id = auth.uid() or is_coach_of(client_id))`.
-  - update و delete: `author_id = auth.uid()` بس. ومن ناحية الأعمدة: `revoke update on comments from authenticated; grant update (body, deleted_at) on comments to authenticated;`
-  - `read_at` مايتغيرش غير من RPC اسمها `mark_comments_read(client uuid)` (security definer). بتعلّم كـ "مقروء" بس التعليقات اللي `author_id <> auth.uid()`، وبس لو اللي بينادي طرف في المحادثة.
-- **`coach_clients`:** الكلاينت يقرا صفه (عشان يعرف مين الكابتن). الكابتن يقرا صفوف كلاينتسه ويغيّر `status`. الإضافة **بس** من خلال `accept_invite`.
-- **`coach_notes`:** الكابتن بس: `coach_id = auth.uid()` في كل العمليات. الكلاينت مالوش أي policy عليه.
+  - الكابتن يكتب ويعدّل بتوعه.
+  - الكلاينت يقرا **بس** اللي متخصص ليه.
+  - القوالب (`client_id` فاضي) للكابتن بس.
+  - محدش يقدر يعمل برنامج غير لو `role = 'coach'`، ولكلاينت بتاعه بس.
+- **`comments`:**
+  - الطرفين يقروا المحادثة.
+  - كل واحد يكتب ويعدّل ويمسح (soft) **بتاعه بس**: التعديل مسموح بس على `body` و`deleted_at` بـ column grants.
+  - `read_at` مايتغيرش غير من `mark_comments_read(client)`، وبتعلّم بس تعليقات الطرف التاني.
+- **`coach_clients`:**
+  - الطرفين يقروا الرابط.
+  - الكابتن يغيّر الحالة (active / paused / archived) طول ما الرابط مش archived.
+  - الكلاينت يقدر **يسيب** الكابتن (archived) بس.
+  - الرابط اللي اتأرشف **مايرجعش غير بدعوة جديدة**، عشان الكابتن مايقدرش يرجّع لنفسه الصلاحية من غير موافقة.
+  - كل كلاينت ليه كابتن واحد بس مش archived.
+- **`coach_notes`:** الكابتن بس، وعن كلاينتس حاليين بس. جدول لوحده عشان الكلاينت يقرا `coach_clients`.
 - **`profiles`:**
-  - كل واحد يقرا ويعدّل بروفايله.
-  - الكابتن يقرا بروفايلات كلاينتسه: `is_coach_of(id)`.
-  - الكلاينت يقرا بروفايل الكابتن بتاعه: `is_client_of(id)`. ده اللي بيخلّي اسم وصورة الكابتن يظهروا في الهيدر.
-  - `role` مايتغيرش من الواجهة. column grant يستثنيه، والكابتن يتعمل يدويًا أو بـ RPC للأدمن.
-- **`invites`:** الكابتن يعمل ويقرا ويمسح دعواته بس. مفيش select للكلاينتس، القبول بس من خلال الـ RPC.
-- **`accept_invite(code text)`** (security definer, `search_path = ''`):
-  1. يرفض لو اللي بينادي `role = 'coach'`.
-  2. يستخدم الكود **مرة واحدة** في خطوة واحدة:
-     `update public.invites set used_by = auth.uid(), used_at = now() where code = $1 and used_by is null and expires_at > now() returning coach_id`.
-  3. لو مفيش نتيجة: خطأ واحد «الكود غلط أو انتهى»، من غير تفرقة بين السببين عشان مايساعدش في التخمين.
-  4. يعمل upsert في `coach_clients` بـ `status = 'active'`.
-  5. الكود عشوائي ١٠ حروف أو أكتر (base32، أكتر من ٥٠ bit)، فالتخمين مش عملي.
-- **التخزين** (`storage.objects`، bucket `progress`):
-  ```sql
-  create policy "client manages own photos" on storage.objects for all to authenticated
-    using (bucket_id = 'progress' and (storage.foldername(name))[1] = auth.uid()::text)
-    with check (bucket_id = 'progress' and (storage.foldername(name))[1] = auth.uid()::text);
-  create policy "coach reads client photos" on storage.objects for select to authenticated
-    using (bucket_id = 'progress' and public.is_coach_of(((storage.foldername(name))[1])::uuid));
-  ```
-  الصور بتتعرض بـ signed URLs قصيرة العمر، مش لينكات عامة.
-- **لازم** اختبارات للصلاحيات تثبت إن:
-  - الكلاينت مش بيقرا بيانات كلاينت تاني، ولا `coach_notes`، ولا يعدّل تعليق الكابتن.
-  - الكابتن مش بيشوف كلاينت مش بتاعه، ولا صوره.
-  - الكود مايتقبلش مرتين ولا بعد ما ينتهي.
+  - كل واحد يقرا ويعدّل بروفايله، **ماعدا `role`**.
+  - الكابتن يقرا بروفايلات كلاينتسه.
+  - الكلاينت يقرا بروفايل الكابتن بتاعه، عشان الاسم والصورة يظهروا في الهيدر.
+  - الكابتن بيتعمل يدويًا من الـ SQL Editor (الخطوات في `supabase/README.md`).
+- **الدعوات:**
+  - بتتعمل بـ `create_invite(days)` بس، والكابتن بس هو اللي يقدر ينادي عليها.
+  - مدتها من ١ لـ ٣٠ يوم.
+  - الكود ١٢ حرف من ٣١ حرف مافيهمش الحروف اللي بتتلخبط زي 0/O و1/I/L، يعني حوالي ٥٩ bit.
+  - الكابتن يشوف أكواده ويسحب اللي ماتستخدمتش.
+- **`accept_invite(code)`:**
+  1. لازم يكون فيه مستخدم مسجّل، ويرفض لو اللي بينادي كابتن.
+  2. يستخدم الكود **مرة واحدة** في خطوة واحدة (`update … where used_by is null and expires_at > now() returning coach_id`).
+  3. الكود الغلط والمنتهي والمستخدم ليهم **رسالة واحدة** عشان الرد مايساعدش في التخمين.
+  4. لو الكلاينت عنده كابتن تاني، يرفض **والكود مايضيعش**.
+  5. يعمل الرابط `active`. ولو كان archived، `started_at` يبدأ من جديد.
+- **صور التقدّم** (`storage.objects`، bucket `progress` الخاص):
+  - الكلاينت يضيف ويستبدل ويمسح في فولدره `{client_id}/` بس.
+  - القراية لصاحب الصور وللكابتن بتاعه.
+  - المقارنة بتتعمل كنص، عشان مسار في bucket تاني مش uuid مايكسرش أي استعلام.
+  - العرض بـ signed URLs قصيرة العمر.
 
 ---
 
@@ -232,7 +225,7 @@ language sql stable security definer set search_path = '' as $$
 
 | # | المرحلة | تبقى خلصت لما |
 |---|---|---|
-| ٠ | **تجهيز Supabase** | المشروع موجود، والـ migrations اتنفذت، والـ RLS اتختبرت، و`js/config.js` فيه URL و anon key |
+| ٠ | **تجهيز Supabase** | ✅ الـ SQL والاختبارات خلصوا (`supabase/`). ⏳ فاضل: المشروع يتعمل، والـ migration يتنفّذ عليه، و`js/config.js` ياخد الـ URL والـ publishable key |
 | ١ | **الحسابات والمزامنة** | تسجيل دخول بالإيميل، والبيانات تترفع وتتسحب، والأوفلاين شغال، والبيانات القديمة اترفعت مرة واحدة، والاختبارات خضرا |
 | ٢ | **لوحة الكابتن للمتابعة بس** | `coach.html`: قائمة الكلاينتس بالالتزام والتنبيهات، وصفحة كلاينت للقراية، ودعوة بكود |
 | ٣ | **البرامج ونظام الأكل من الكابتن** | الكابتن يكتب أو ينسخ قالب، والكلاينت يستلمه ويبقى نشط عنده، وأهداف الوجبات من الخطة |
@@ -259,11 +252,11 @@ language sql stable security definer set search_path = '' as $$
 
 انسخ البرومبت في جلسة جديدة على نفس الريبو.
 
-**مرحلة ٠: تجهيز Supabase**
+**مرحلة ٠: تجهيز Supabase** (الـ SQL والاختبارات خلصوا، فاضل التطبيق على المشروع)
 ```
-اقرا docs/coach-plan.md كله. نفّذ المرحلة ٠: اكتب migrations في supabase/migrations
-لكل الجداول والـ RLS والـ RPC accept_invite حسب القسم ٤، واكتب اختبارات RLS.
-بيانات المشروع: URL = <...>، anon key = <...>. قولّي لو محتاج access token أو أنفّذ SQL بنفسي.
+اقرا docs/coach-plan.md و supabase/README.md. عملت مشروع Supabase ونفّذت
+supabase/migrations/0001_coach_core.sql في الـ SQL Editor. Project URL = <...>،
+publishable key = <...>. اتأكد إن القاعدة شغالة على المشروع الحقيقي وكمّل المرحلة ١.
 ```
 
 **مرحلة ١: الحسابات والمزامنة**
@@ -303,3 +296,8 @@ Web Push بـ Edge Function، وتذكير بأيام التمرين. افتح P
 | 2026-11-06 | Supabase للباك إند، والواجهة تفضل JavaScript عادي على GitHub Pages |
 | 2026-11-06 | تسجيل الدخول بالإيميل (OTP) في الأول |
 | 2026-11-06 | مراجعة الخطة: تعليقات كل واحد يعدّل بتاعه بس، صلاحيات للتخزين، سحب بهامش تداخل والتعارض بـ `modified_at`، `search_path` ثابت، ملاحظات الكابتن في جدول لوحده، الإعدادات صف لكل إعداد، وكود دعوة يتستخدم مرة واحدة |
+| 2026-11-22 | المرحلة ٠ اتنفذت: migration واحد (`0001_coach_core.sql`) و٢١ اختبار على Postgres محلي، اتجربوا كمان ضد ٩ أعطال مقصودة |
+| 2026-11-22 | `habit_days` مفتاحها `(client_id, date)` بدل `id`، عشان جهازين في نفس اليوم مايتخانقوش |
+| 2026-11-22 | الدوال المساعدة في schema `private` مش معروضة في الـ API. الدعوات بتتعمل بـ `create_invite()` بس |
+| 2026-11-22 | الكلاينت يقدر يسيب الكابتن، والرابط المتأرشف مايرجعش غير بدعوة جديدة. كابتن واحد بس لكل كلاينت في نفس الوقت |
+| 2026-11-22 | مفيش مسح نهائي لبيانات الكلاينت، كله soft delete. ومسح الحساب نفسه بيشيل كل حاجة (`on delete cascade`) |
