@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: App tests (jsdom)
+        run: npm test
+      - name: Database permission tests (local PostgreSQL, preinstalled on the runner)
+        run: npm run test:db
+        env:
+          REQUIRE_PG: "1"

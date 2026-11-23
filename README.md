@@ -2,6 +2,10 @@
 
 A mobile workout, body measurement, and meal tracker. Workout history and drafts are stored in this browser's local storage. Export backups from the Plan tab to move data between devices.
 
+## Roadmap
+
+The plan to turn this into an app for a coach and their clients (accounts, sync, coach dashboard, programs and meal plans from the coach) is in [docs/coach-plan.md](docs/coach-plan.md), with a ready-to-use prompt for each phase.
+
 ## Design
 
 Dark, built from gym materials: rubber-mat charcoal background, iron surfaces, chalk-white text and one lime accent. Lime only marks something done, next or live. Plate colours follow the competition code (red 25, blue 20, yellow 15, green 10, white 5) and appear only in plate graphics. Headings and numbers use Big Shoulders Display and text uses Archivo, with IBM Plex Sans Arabic for Arabic. There are no all-caps labels.
@@ -62,3 +66,5 @@ When you add a file to `js/`, add a `<script>` tag for it in `index.html` and it
 ## Tests
 
 Run `npm ci`, then `npm test`. The tests exercise the app DOM with jsdom, including date persistence, completion and undo, partial workout saves, input validation, copying previous sets, keyboard cancellation, undoing removals, backup import, editable goals, progress charts, weight suggestions, workout history, food macros and backup reminders. Canvas rendering and visual layout require a browser check.
+
+`npm run test:db` checks the database for the coach version: it runs the Supabase migration on a throwaway local PostgreSQL and tests every permission rule. It needs PostgreSQL 14+ installed and skips otherwise. See [supabase/README.md](supabase/README.md) for the project setup.
