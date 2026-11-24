@@ -263,5 +263,4 @@ var MEALS = [
   { name: "Dinner", kcal: 870, p: 64, items: ["2 cans tuna in water, or 200 g grilled fish", "1 baladi loaf", "Tahini or olive oil salad", "1 cup plain yogurt", "Small handful of almonds (about 20 g)"] }
 ];
 
-var BASE = { date: "2026-10-05", kg: 90.6, waist: null, fat: 25.2, note: "InBody" };
 var GOAL_DEFAULTS = { kg: 81.0, kcal: 2550, protein: 180 };

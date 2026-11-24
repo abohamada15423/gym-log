@@ -19,7 +19,7 @@ function renderMeals(root) {
   var rows = state.food.filter(function (f) { return f.date === foodDate; }), kc = 0, pr = 0, cb = 0, ft = 0;
   rows.forEach(function (f) { kc += f.kcal; pr += f.p; cb += f.c || 0; ft += f.f || 0; });
   function addFood(m) {
-    var e = { id: uid(), date: foodDate, name: m.name, kcal: m.kcal, p: m.p };
+    var e = { id: rid(), date: foodDate, name: m.name, kcal: m.kcal, p: m.p };
     if (m.c != null) e.c = m.c; if (m.f != null) e.f = m.f;
     state.food.push(e); save(); toast(m.name + " added"); render();
   }

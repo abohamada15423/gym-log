@@ -25,7 +25,11 @@
     <div class="top">
       <div class="hello"><small id="today-lbl"></small><h1 id="page-title">Let's train</h1></div>
       <div class="top-r">
-        <div class="status" id="status" aria-live="polite"></div>
+        <div class="top-meta">
+          <div class="status" id="status" aria-live="polite"></div>
+          <div class="coach-name" id="coach-name" hidden></div>
+        </div>
+        <button class="acct" id="acct" type="button" aria-label="Sign in"></button>
       </div>
     </div>
     <main class="view" id="view"></main>
@@ -66,6 +70,8 @@
 
   <script src="js/data.js"></script>
   <script src="js/core.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/sync.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/effects.js"></script>
   <script src="js/logic.js"></script>
@@ -79,6 +85,7 @@
   <script src="js/meals.js"></script>
   <script src="js/plan.js"></script>
   <script src="js/focus.js"></script>
+  <script src="js/account.js"></script>
   <script src="js/app.js"></script>
 </body>
 

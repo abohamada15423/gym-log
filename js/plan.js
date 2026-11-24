@@ -8,12 +8,15 @@ function renderPlan(root) {
     return h("div", { class: "stat" }, [h("div", { class: "k", text: k }), big]);
   }
 
+  renderAccountCard(root);
   renderPrograms(root);
-  var G = goals();
+  var G = goals(), fromCoach = coachTargets();
   var startEntry = state.body.filter(function (b) { return b.kg != null; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; })[0];
   root.appendChild(h("h2", { text: "Your goals" }));
   function goalField(label, key, unit, min, max) {
     var inp = h("input", { type: "text", inputmode: "decimal", value: String(G[key]), "aria-label": label + " (" + unit + ")" });
+    // calories and protein from the coach's meal plan are the coach's to change
+    if (fromCoach[key] != null) { inp.disabled = true; return h("label", {}, [label + " (" + unit + ")", inp, h("small", { class: "set-by", text: "Set by your coach" })]); }
     inp.onchange = function () {
       var v = num(inp.value);
       if (v === null || v < min || v > max) { toast(label + " must be " + min + "–" + max + " " + unit); inp.value = String(goals()[key]); return; }
@@ -132,6 +135,12 @@ function renderPlan(root) {
         var parsed = JSON.parse(ev.target.result);
         if (!parsed || !Array.isArray(parsed.sessions)) { toast("That file isn't a Gym Log backup"); return; }
         var n = parsed.sessions.length, m = Array.isArray(parsed.body) ? parsed.body.length : 0;
+        // signed in: add the backup to the account instead of replacing it, so nothing is deleted on other phones
+        if (syncLinked()) {
+          if (!confirm("Add this backup to your account?\n\nBackup: " + n + " workout" + (n === 1 ? "" : "s") + ", " + m + " check-in" + (m === 1 ? "" : "s") + ".\n\nWhat's already in your account stays. Where the backup has the same entry, the backup's copy is used.")) return;
+          mergeBackup(parsed); applyLoaded(); save(); render(); toast("Backup added to your account");
+          return;
+        }
         if (!confirm("Replace everything on this device with this backup?\n\nBackup: " + n + " workout" + (n === 1 ? "" : "s") + ", " + m + " check-in" + (m === 1 ? "" : "s") + ".\nThis device: " + state.sessions.length + " workouts, " + state.body.length + " check-ins.\n\nExport a backup first if you want to keep what's here.")) return;
         adopt(parsed); applyLoaded(); save(); render(); toast("Backup restored!");
       } catch (err) { toast("Invalid backup file"); }
@@ -141,7 +150,7 @@ function renderPlan(root) {
   };
   root.appendChild(h("div", { class: "card", style: "display:flex;flex-direction:column;gap:10px" }, [
     h("div", { class: "grid2" }, [expBtn, impBtn, fileIn]),
-    h("div", { class: "note", text: state.lastBackup ? "Last backup: " + mbDay(state.lastBackup) + " (" + (state.backupCount || 0) + " workouts)." : "No backup yet. Your data only lives on this device." })
+    h("div", { class: "note", text: syncLinked() ? "Your data is also saved in your account." : state.lastBackup ? "Last backup: " + mbDay(state.lastBackup) + " (" + (state.backupCount || 0) + " workouts)." : "No backup yet. Your data only lives on this device." })
   ]));
 
   root.appendChild(h("h2", { text: "How to progress" }));

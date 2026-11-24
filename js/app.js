@@ -44,6 +44,7 @@ load();
 applyLang();
 fx.enter = true;
 render();
+syncStart();
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () { }); });

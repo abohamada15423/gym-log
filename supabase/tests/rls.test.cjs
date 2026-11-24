@@ -163,6 +163,7 @@ dbTest('anonymous visitors can read nothing and call nothing', async () => {
   await assert.rejects(as('anon', 'select * from public.profiles'), /permission denied/);
   await assert.rejects(as('anon', "select public.accept_invite('ABCDEFGHJKMN')"), /permission denied/);
   await assert.rejects(as('anon', 'select private.is_coach()'), /permission denied/);
+  await assert.rejects(as('anon', 'select public.delete_my_account()'), /permission denied/);
 });
 
 dbTest('people edit their own name but never their role', async () => {
@@ -392,4 +393,30 @@ dbTest('deleting an account removes everything that belongs to it, and the code 
   assert.equal((await db.query('select count(*)::int as n from public.profiles where id = $1', [carl.id])).rows[0].n, 0);
   const dan = await signUp('dan@example.com');
   await assert.rejects(as(dan, 'select public.accept_invite($1)', [carlsCode]), /wrong or has expired/);
+});
+
+dbTest('people delete their own account and everything in it, and only their own', async () => {
+  const erin = await signUp('erin@example.com', { full_name: 'Erin' });
+  const erinsCode = (await rows(coach2, 'select public.create_invite() as code'))[0].code;
+  await as(erin, 'select public.accept_invite($1)', [erinsCode]);
+  await upsert(erin, 'workout_sessions', { id: uuid(), client_id: erin.id, date: '2026-11-24', sets: { Squat: [[60, 5]] } });
+  await upsert(erin, 'food_logs', { id: uuid(), client_id: erin.id, date: '2026-11-24', name: 'Eggs', kcal: 215, p: 18 });
+  await upsert(erin, 'client_settings', { client_id: erin.id, key: 'goals', value: { kg: 70 } }, ['client_id', 'key']);
+  const count = async q => (await db.query(q, [erin.id])).rows[0].n;
+  const others = (await db.query('select count(*)::int as n from auth.users where id <> $1', [erin.id])).rows[0].n;
+
+  await as(erin, 'select public.delete_my_account()');
+  assert.equal(await count('select count(*)::int as n from auth.users where id = $1'), 0);
+  assert.equal(await count('select count(*)::int as n from public.profiles where id = $1'), 0);
+  assert.equal(await count('select count(*)::int as n from public.workout_sessions where client_id = $1'), 0);
+  assert.equal(await count('select count(*)::int as n from public.food_logs where client_id = $1'), 0);
+  assert.equal(await count('select count(*)::int as n from public.client_settings where client_id = $1'), 0);
+  assert.equal(await count('select count(*)::int as n from public.coach_clients where client_id = $1'), 0);
+  assert.equal((await db.query('select count(*)::int as n from auth.users where id <> $1', [erin.id])).rows[0].n, others, 'nobody else');
+  assert.ok((await db.query('select used_at from public.invites where code = $1', [erinsCode])).rows[0].used_at, 'the code stays used');
+  // a request with no user in it is refused outright
+  await assert.rejects(as({ id: '' }, 'select public.delete_my_account()'), /Sign in first/);
+  // a session left over from the deleted account finds nothing to delete
+  await as(erin, 'select public.delete_my_account()');
+  assert.equal((await db.query('select count(*)::int as n from auth.users')).rows[0].n, others);
 });

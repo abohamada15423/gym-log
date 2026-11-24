@@ -66,7 +66,10 @@ function exerciseTrend(exName) {
 
 // Remove an entry from state[listName] and offer a few seconds to put it back where it was.
 function removeWithUndo(listName, item, label) {
-  var i = state[listName].indexOf(item); if (i < 0) return;
+  var i = state[listName].indexOf(item);
+  // a sync may have swapped in a fresh copy of the record the screen was showing
+  if (i < 0 && item && item.id) for (var j = 0; j < state[listName].length; j++) if (state[listName][j] && state[listName][j].id === item.id) { i = j; item = state[listName][j]; break; }
+  if (i < 0) return;
   state[listName].splice(i, 1); save(); render();
   toast(label + " removed", 6000, {
     label: "Undo", run: function () {

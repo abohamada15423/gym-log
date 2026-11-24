@@ -72,6 +72,7 @@ function daysBetween(a, b) { var x = ymdParse(a), y = ymdParse(b); return x && y
 // Due when there are 3+ workouts and either no backup yet, or 14+ days and new workouts since the last one.
 function backupDue() {
   if (state.sessions.length < 3) return false;
+  if (syncLinked() && !syncPending()) return false;  // it's in the account as well as on this phone
   if (state.backupSnooze && today() < state.backupSnooze) return false;
   if (!state.lastBackup) return true;
   return daysBetween(state.lastBackup, today()) >= 14 && state.sessions.length !== (state.backupCount || 0);
@@ -316,6 +317,11 @@ function renderPrograms(root) {
       days ? h("div", { style: "font-family:var(--f-data);font-size:.72rem;color:var(--muted)", text: days }) : null
     ]);
     b.onclick = onclick; return b;
+  }
+  var cp = coachProgram();
+  if (cp) {
+    wrap.appendChild(card("coach", cp.name, cp.days.length + " days", sync.coach && sync.coach.name ? "From Coach " + sync.coach.name : "From your coach",
+      cp.days.map(function (x) { return x.name; }).join(" · "), function () { selectProgram("coach"); }));
   }
   PROGRAMS.forEach(function (p) {
     wrap.appendChild(card(p.id, p.name, p.freq, p.desc, p.days.map(function (x) { return x.name; }).join(" · "), function () { selectProgram(p.id); }));

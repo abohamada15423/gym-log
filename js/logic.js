@@ -35,14 +35,20 @@ function getProgram(id) {
   return PROGRAMS[0];
 }
 function applyProgram() {
-  if (state.programId === "custom" && state.custom && state.custom.days && state.custom.days.length) {
+  var cp = typeof coachProgram === "function" ? coachProgram() : null;
+  if (state.programId === "coach" && cp) {
+    DAYS = cp.days;
+  } else if (state.programId === "custom" && state.custom && state.custom.days && state.custom.days.length) {
     DAYS = state.custom.days;
   } else {
-    if (state.programId === "custom") state.programId = "split4";
+    if (state.programId === "custom" || state.programId === "coach") state.programId = "split4";
     DAYS = getProgram(state.programId).days;
   }
 }
-function progName() { return state.programId === "custom" && state.custom ? state.custom.name : getProgram(state.programId).name; }
+function progName() {
+  if (state.programId === "coach" && typeof coachProgram === "function" && coachProgram()) return coachProgram().name;
+  return state.programId === "custom" && state.custom ? state.custom.name : getProgram(state.programId).name;
+}
 function dk(id) { return (state.programId === "split4" ? "" : state.programId + "|") + id; }
 function allLib() { return LIB.concat(state.customLib || []); }
 function retag() { state.custom.days.forEach(function (d, i) { d.tag = "Day " + (i + 1); }); }
@@ -65,10 +71,12 @@ function createBlankCustom() {
   state.custom = { name: "My Program", days: [NEW_DAY(1)] };
   state.programId = "custom"; applyProgram(); dayId = DAYS[0].id; save(); render();
 }
+// Everything is written to this phone first. With an account, sync.js then uploads what changed.
 function save() {
   try {
     localStorage.setItem("gymlog-v1", JSON.stringify(state));
-    $("status").textContent = "Saved ✓";
+    if (typeof syncLinked === "function" && syncLinked()) syncNoteSave();
+    else $("status").textContent = "Saved ✓";
   } catch (e) { $("status").textContent = "Storage Error"; }
 }
 

@@ -1,7 +1,7 @@
 // Gym Log Pro service worker: offline support, updates arrive when online.
-var CACHE="gymlog-v9";
-var SCRIPTS=["data","core","i18n","effects","logic","animation","photos","timer","dialogs","train","muscles","body","meals","plan","focus","app"];
-var SHELL=["./","index.html","css/app.css","manifest.webmanifest","icon-192.png","icon-512.png","apple-touch-icon.png"]
+var CACHE="gymlog-v10";
+var SCRIPTS=["data","core","config","sync","i18n","effects","logic","animation","photos","timer","dialogs","train","muscles","body","meals","plan","focus","account","app","vendor/supabase"];
+var SHELL=["./","index.html","privacy.html","css/app.css","manifest.webmanifest","icon-192.png","icon-512.png","apple-touch-icon.png"]
   .concat(SCRIPTS.map(function(n){return "js/"+n+".js";}));
 self.addEventListener("install",function(e){
   // Cache each file on its own: one missing file must not stop the worker installing.
@@ -18,8 +18,11 @@ self.addEventListener("fetch",function(e){
   var req=e.request;
   if(req.method!=="GET")return;
   var url=new URL(req.url);
+  // the account's data (Supabase) always comes from the network: a cached answer would hide new changes
+  if(/\.supabase\.co$/.test(url.hostname))return;
   var sameOrigin=url.origin===self.location.origin;
-  var isPage=req.mode==="navigate"||(sameOrigin&&/\/(index\.html)?$/.test(url.pathname));
+  // only the app itself is stored as index.html; other pages (privacy.html) are cached under their own name
+  var isPage=sameOrigin&&/\/(index\.html)?$/.test(url.pathname);
   if(isPage){
     // network first so new versions show up, fall back to cache offline
     e.respondWith(fetch(req).then(function(r){
