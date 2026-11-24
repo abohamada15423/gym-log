@@ -77,7 +77,7 @@ function cmNote(c, opts) {
 function cmComposer(opts) {
   opts = opts || {};
   var form = h("form", { class: "cm-compose" });
-  var ta = h("textarea", { rows: "2", maxlength: "2000", dir: "auto", placeholder: opts.placeholder || "Write a comment…", "aria-label": opts.label || "Your comment" });
+  var ta = h("textarea", { rows: "2", maxlength: "2000", placeholder: opts.placeholder || "Write a comment…", "aria-label": opts.label || "Your comment" });
   var go = h("button", { class: "btn sm", type: "submit", text: "Send" });
   form.onsubmit = function (e) {
     if (e) e.preventDefault();

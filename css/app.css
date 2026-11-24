@@ -2615,7 +2615,8 @@ label { font: 600 .8rem var(--f-body); color: var(--muted) }
 .cm-compose .linkbtn { align-self: center; padding: 6px 4px; font-size: .88rem }
 .cm-bad { color: var(--warn); font-weight: 700 }
 .cm-compose { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 10px }
-.cm-compose textarea { flex: 1 1 100%; min-height: 66px; resize: vertical; padding: 10px 12px; font: 500 .95rem/1.4 var(--f-body); text-align: start; border: 1px solid var(--line) }
+/* each line runs in the direction of what's typed on it; empty, it follows the page (the placeholder too) */
+.cm-compose textarea { flex: 1 1 100%; min-height: 66px; resize: vertical; padding: 10px 12px; font: 500 .95rem/1.4 var(--f-body); text-align: start; border: 1px solid var(--line); unicode-bidi: plaintext }
 .cm-compose textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
 .cm-compose .btn { flex: none; width: auto; min-width: 92px }
 /* Send sits at the end of the line, with Cancel (when there is one) just before it */
