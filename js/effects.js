@@ -44,11 +44,12 @@ function lineChart(points, opts) {
   wrap.firstChild.innerHTML = out.join("");
   return wrap;
 }
+// upIsGood: true or false colours the change as progress or not; null leaves it neutral (no goal to judge by).
 function chartHead(title, last, unit, change, upIsGood) {
   var c = Math.round(change * 10) / 10;
   return h("div", { class: "chart-head" }, [
     h("div", {}, [h("small", { text: title }), h("br"), h("b", { text: mbFmt(last) + " " + unit })]),
-    h("small", { class: c === 0 ? "" : (c > 0) === !!upIsGood ? "up" : "down", text: (c > 0 ? "+" : "") + mbFmt(c) + " " + unit + " overall" })
+    h("small", { class: c === 0 || upIsGood == null ? "" : (c > 0) === !!upIsGood ? "up" : "down", text: (c > 0 ? "+" : "") + mbFmt(c) + " " + unit + " overall" })
   ]);
 }
 // Best estimated 1RM per training day for one exercise (Epley). Bodyweight-only work falls back to best reps.

@@ -49,6 +49,22 @@ Tap the round button at the top right, or **Sign in or create account** on the P
 
 How it works is in [docs/coach-plan.md](docs/coach-plan.md) (section 5) and at the top of `js/sync.js`. The database is in [supabase/](supabase/README.md).
 
+## Coach dashboard
+
+Coaches open **coach.html** (`…/gym-log/coach.html`), or **Open the coach dashboard** in the app's account settings. It's made for a laptop or tablet and works on a phone, in English or Arabic. A coach account is a normal app account that the app's owner turns into a coach account (see `supabase/README.md`).
+
+- **Clients:** one row per client with when they were last active, the last 7 days as tally marks (one per planned workout, lime when done), average daily protein against their target, and their weight change over about two weeks. Clients who need attention come first under **Needs you**, with the reasons:
+  - no workout for 5 days or more (counted from when they joined if they haven't trained yet)
+  - protein under 80% of the target on each of the last 3 full days
+  - weight moving away from the goal over two weeks (by 0.3 kg or more)
+  - no check-in for 14 days or more
+
+  Targets come from the coach's meal plan, otherwise the client's own goals. With no target or goal weight there is nothing to flag. Paused clients are listed separately, without flags.
+- **One client:** Summary (the same week card, calendar, records and muscle map the client sees), Workouts with every set and note, Meals day by day against the targets, Body charts and check-ins, and private **Notes** that only the coach sees. Pause, resume or remove the client. Removing ends the coach's access until the client accepts a new invite.
+- **Invite a client:** makes a 12-character code and a link (`…/gym-log/?invite=CODE`) that works once for 7 days. Open codes can be withdrawn.
+
+Coaches only ever read their clients' data; the database doesn't let them change it. The dashboard signs in separately from the app, so signing in there doesn't sign the app in on the same device.
+
 ## Arabic
 
 Choose **العربية** at the top of the Plan tab to switch the app to Arabic with a right-to-left layout. Choose **English** to switch back. Exercise names, food names and anything you type stay as written.
@@ -74,6 +90,7 @@ There is no build step. `index.html` holds the page markup, `css/app.css` the st
 | `js/train.js` · `js/body.js` · `js/meals.js` · `js/plan.js` | One file per tab (`js/muscles.js` holds the muscle map used on Body) |
 | `js/focus.js` | Focus mode: full-screen, one set at a time |
 | `js/account.js` | Sign-in and account screens, the header's sync status and coach, the Plan tab's Account card |
+| `coach.html` · `js/coach.js` · `css/coach.css` | The coach dashboard. It loads the app's own data, chart and Progress scripts and draws a client's log with them |
 | `js/app.js` | Rendering, tab switching, start-up and service worker registration |
 
 When you add a file to `js/`, add a `<script>` tag for it in `index.html` and its name to `SCRIPTS` in `sw.js`, so it works offline.
@@ -83,6 +100,8 @@ When you add a file to `js/`, add a `<script>` tag for it in `index.html` and it
 ## Tests
 
 Run `npm ci`, then `npm test`. The tests exercise the app DOM with jsdom, including date persistence, completion and undo, partial workout saves, input validation, copying previous sets, keyboard cancellation, undoing removals, backup import, editable goals, progress charts, weight suggestions, workout history, food macros and backup reminders. Canvas rendering and visual layout require a browser check.
+
+`tests/coach.test.cjs` runs the coach dashboard against a fake server: the roster groups and numbers, every flag's threshold, a client's tabs (and that nothing is written to the device), private notes, pause and remove, invites, sign-in, and the Arabic version.
 
 `tests/sync.test.cjs` runs accounts and sync against a fake server that follows the database's last-write-wins rules: the first upload, a second phone with the same data, offline changes, conflicts in both directions, the pull overlap, settings and habits, refused records, keeping data on the phone, coach programs and meal plans, backups on a signed-in phone, joining a coach, signing out, deleting the account, and the Arabic screens.
 

@@ -410,6 +410,17 @@ test('the account screens are translated to Arabic', async t => {
   }
 });
 
+test('a coach account gets a link to the coach dashboard instead of a join form', async t => {
+  const server = fakeServer(), a = app(t, server);
+  server.profiles.set(ME.id, { id: ME.id, full_name: 'Karim Mostafa', role: 'coach' });
+  await a.signIn();
+  a.doc.getElementById('acct').click();
+  const link = [...a.doc.querySelectorAll('#mbox a')].find(x => x.textContent === 'Open the coach dashboard');
+  assert.ok(link);
+  assert.equal(link.getAttribute('href'), 'coach.html');
+  assert.equal(a.doc.querySelector('#mbox input.code-in'), null);
+});
+
 test('the bundled Supabase library is the version package.json pins', () => {
   const pin = require('../package.json').devDependencies['@supabase/supabase-js'];
   const head = fs.readFileSync('js/vendor/supabase.js', 'utf8').slice(0, 200);

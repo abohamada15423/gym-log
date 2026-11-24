@@ -43,6 +43,13 @@ function rid() {
   var x = Array.prototype.map.call(b, function (n) { return (n + 256).toString(16).slice(1); }).join("");
   return x.slice(0, 8) + "-" + x.slice(8, 12) + "-" + x.slice(12, 16) + "-" + x.slice(16, 20) + "-" + x.slice(20);
 }
+// Two letters for a round avatar: first and last name, or the start of an email address.
+function initials(s) {
+  s = String(s || "").trim(); if (!s) return "";
+  if (s.indexOf("@") > 0 && s.indexOf(" ") < 0) s = s.split("@")[0];
+  var parts = s.split(/[\s._-]+/).filter(Boolean);
+  return (parts.length > 1 ? parts[0].charAt(0) + parts[parts.length - 1].charAt(0) : s.slice(0, 2)).toUpperCase();
+}
 function toast(t, ms, action) {
   var e = $("toast"); e.hidden = false; e.textContent = t;
   if (action) {

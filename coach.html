@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#151619">
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <title>Gym Log Coach</title>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/coach.css">
+</head>
+
+<body class="coach-page">
+  <header class="c-top">
+    <a class="c-brand" href="coach.html"><b>Gym Log</b><span>Coach</span></a>
+    <div class="c-top-r">
+      <button class="c-lang" id="c-lang" type="button" translate="no"></button>
+      <button class="btn ghost sm" id="c-out" type="button" hidden>Sign out</button>
+    </div>
+  </header>
+  <main class="c-main" id="view"></main>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Details" hidden>
+    <div class="mbox" id="mbox"></div>
+  </div>
+
+  <!-- the app's own building blocks, then the dashboard -->
+  <script src="js/vendor/supabase.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/effects.js"></script>
+  <script src="js/logic.js"></script>
+  <script src="js/muscles.js"></script>
+  <script src="js/dialogs.js"></script>
+  <script src="js/body.js"></script>
+  <script src="js/coach.js"></script>
+</body>
+
+</html>

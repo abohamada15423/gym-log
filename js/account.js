@@ -6,12 +6,6 @@
 var ICON_USER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.4" r="3.7"/><path d="M4.6 20.2c1.2-3.9 4-5.8 7.4-5.8s6.2 1.9 7.4 5.8"/></svg>';
 var ICON_MAIL = '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="11" width="36" height="26" rx="5"/><path d="M8 14l16 12 16-12"/></svg>';
 
-function initials(s) {
-  s = String(s || "").trim(); if (!s) return "";
-  if (s.indexOf("@") > 0 && s.indexOf(" ") < 0) s = s.split("@")[0];
-  var parts = s.split(/[\s._-]+/).filter(Boolean);
-  return (parts.length > 1 ? parts[0].charAt(0) + parts[parts.length - 1].charAt(0) : s.slice(0, 2)).toUpperCase();
-}
 function validEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 function privacyHref() { return "privacy.html" + (state.lang === "ar" ? "#ar" : ""); }
 
@@ -350,7 +344,8 @@ var ACCT_VIEWS = {
       };
       body.appendChild(leave);
     } else if (sync.role === "coach") {
-      body.appendChild(h("p", { class: "acct-note", text: "This is a coach account. Your coaching dashboard comes in a later update." }));
+      body.appendChild(h("p", { class: "acct-note", text: "This is a coach account." }));
+      body.appendChild(h("a", { class: "btn", href: "coach.html", text: "Open the coach dashboard" }));
     } else {
       body.appendChild(h("p", { class: "acct-note", text: "Enter the code your coach gave you." }));
       body.appendChild(joinForm(sync.invite));
