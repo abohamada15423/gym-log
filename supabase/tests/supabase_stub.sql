@@ -19,9 +19,13 @@ grant usage on schema auth to anon, authenticated, service_role, supabase_auth_a
 
 create table auth.users (
   id                 uuid primary key default gen_random_uuid(),
+  aud                varchar(255),
+  role               varchar(255),
   email              text unique,
+  raw_app_meta_data  jsonb,
   raw_user_meta_data jsonb not null default '{}',
-  created_at         timestamptz not null default now()
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz
 );
 grant select, insert, update, delete on auth.users to supabase_auth_admin;
 
