@@ -53,9 +53,27 @@ function renderMeals(root) {
     root.appendChild(mine);
   }
 
+  // the coach's meal plan: each meal logs with one tap, and its foods are listed
+  var plan = coachPlan();
+  if (plan && plan.meals.length) {
+    root.appendChild(h("h2", { text: "From your coach" }));
+    var mp = h("div", { class: "card coach-meals" }, [h("small", { class: "coach-plan-name", translate: "no", text: plan.name })]);
+    plan.meals.forEach(function (m) {
+      var b = h("button", { class: "btn ghost sm", type: "button", text: "+ Add", "aria-label": "Add " + m.name });
+      b.onclick = function () { addFood(m); };
+      mp.appendChild(h("div", { class: "coach-meal" }, [
+        h("div", {}, [h("b", { translate: "no", text: m.name }), h("small", { text: macroText(m) }),
+          m.items.length ? h("ul", {}, m.items.map(function (x) { return h("li", { translate: "no", text: x }); })) : null]),
+        b
+      ]));
+    });
+    root.appendChild(mp);
+  }
+
   root.appendChild(h("h2", { text: "Quick add" }));
   var chips = h("div", { class: "fchips" });
-  MEALS.concat(QUICK_FOODS).forEach(function (m) {
+  // the built-in meal presets give way to the coach's meals
+  (plan && plan.meals.length ? QUICK_FOODS : MEALS.concat(QUICK_FOODS)).forEach(function (m) {
     var b = h("button", { class: "btn ghost", text: "+ " + m.name + " (" + m.p + "g P)" });
     b.onclick = function () { addFood(m); };
     chips.appendChild(b);

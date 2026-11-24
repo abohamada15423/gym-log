@@ -36,14 +36,13 @@ function getProgram(id) {
 }
 function applyProgram() {
   var cp = typeof coachProgram === "function" ? coachProgram() : null;
-  if (state.programId === "coach" && cp) {
-    DAYS = cp.days;
-  } else if (state.programId === "custom" && state.custom && state.custom.days && state.custom.days.length) {
-    DAYS = state.custom.days;
-  } else {
-    if (state.programId === "custom" || state.programId === "coach") state.programId = "split4";
-    DAYS = getProgram(state.programId).days;
-  }
+  var hasCustom = !!(state.custom && state.custom.days && state.custom.days.length);
+  // the coach's program ended: back to the client's own program if they have one
+  if (state.programId === "coach" && !cp) state.programId = hasCustom ? "custom" : "split4";
+  if (state.programId === "custom" && !hasCustom) state.programId = "split4";
+  if (state.programId === "coach") DAYS = cp.days;
+  else if (state.programId === "custom") DAYS = state.custom.days;
+  else DAYS = getProgram(state.programId).days;
 }
 function progName() {
   if (state.programId === "coach" && typeof coachProgram === "function" && coachProgram()) return coachProgram().name;

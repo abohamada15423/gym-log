@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 
 <head>
   <meta charset="utf-8">
@@ -18,6 +18,7 @@
 <body class="coach-page">
   <header class="c-top">
     <a class="c-brand" href="coach.html"><b>Gym Log</b><span>Coach</span></a>
+    <nav class="c-nav" id="c-nav" aria-label="Dashboard" hidden><a href="#" data-view="list">Clients</a><a href="#templates" data-view="templates">Templates</a></nav>
     <div class="c-top-r">
       <button class="c-lang" id="c-lang" type="button" translate="no"></button>
       <button class="btn ghost sm" id="c-out" type="button" hidden>Sign out</button>
@@ -38,6 +39,7 @@
   <script src="js/i18n.js"></script>
   <script src="js/effects.js"></script>
   <script src="js/logic.js"></script>
+  <script src="js/animation.js"></script>
   <script src="js/muscles.js"></script>
   <script src="js/dialogs.js"></script>
   <script src="js/body.js"></script>

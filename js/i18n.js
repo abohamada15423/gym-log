@@ -215,7 +215,29 @@ var AR_WORDS = {
   "Send this link. Your client opens it on their phone, creates an account and joins you. Or they type the code in the app.": "أرسل هذا الرابط. يفتحه المتدرب على هاتفه وينشئ حسابًا وينضم إليك، أو يكتب الكود في التطبيق.",
   "Copy link": "نسخ الرابط", "Link copied": "تم نسخ الرابط", "Share": "مشاركة", "It works once and expires in 7 days.": "يعمل مرة واحدة وتنتهي صلاحيته بعد 7 أيام.",
   "Make an invite code": "أنشئ كود دعوة", "Each code works for one client, once, for 7 days.": "كل كود لمتدرب واحد، مرة واحدة، لمدة 7 أيام.",
-  "Loading your open codes…": "جارٍ تحميل أكوادك المفتوحة…", "Open codes": "الأكواد المفتوحة", "Withdraw": "سحب", "Code withdrawn": "تم سحب الكود", "Expires in 1 day": "ينتهي بعد يوم واحد"
+  "Loading your open codes…": "جارٍ تحميل أكوادك المفتوحة…", "Open codes": "الأكواد المفتوحة", "Withdraw": "سحب", "Code withdrawn": "تم سحب الكود", "Expires in 1 day": "ينتهي بعد يوم واحد",
+  // programs and meal plans the coach writes (phase 3)
+  "Program": "البرنامج", "Templates": "القوالب", "Dashboard": "اللوحة", "Start from": "ابدأ من", "A blank program": "برنامج فارغ", "A blank meal plan": "نظام أكل فارغ",
+  "Built-in programs": "البرامج الجاهزة في التطبيق", "The app's example meals": "وجبات التطبيق النموذجية", "Your templates": "قوالبك",
+  "Write the program": "اكتب البرنامج", "Write the meal plan": "اكتب نظام الأكل", "Send a different program": "أرسل برنامجًا آخر", "Send a different meal plan": "أرسل نظام أكل آخر",
+  "Write a program": "اكتب برنامجًا", "Write a meal plan": "اكتب نظام أكل", "Save template": "حفظ القالب", "Save as template": "حفظ كقالب",
+  "Edit day": "تعديل اليوم", "Move up": "تحريك لأعلى", "1 exercise": "تمرين واحد", "No exercises yet.": "لا تمارين بعد.", "＋ Add a training day": "＋ إضافة يوم تمرين",
+  "Edit their program": "تعديل برنامجه", "New program": "برنامج جديد", "Edit the template": "تعديل القالب", "New program template": "قالب برنامج جديد",
+  "e.g. Strength block": "مثال: مرحلة القوة", "Name the program first": "اكتب اسم البرنامج أولًا", "Add at least one exercise": "أضف تمرينًا واحدًا على الأقل",
+  "Saved as a template": "تم الحفظ كقالب", "Template saved": "تم حفظ القالب", "Edit program": "تعديل البرنامج", "Stop this program": "إيقاف هذا البرنامج", "Program stopped": "تم إيقاف البرنامج",
+  "No program from you yet.": "لا يوجد برنامج منك بعد.", "Discard your changes?": "تجاهل التعديلات؟",
+  "Calories a day": "السعرات في اليوم", "e.g. Lean bulk": "مثال: تضخيم نظيف", "e.g. Breakfast": "مثال: الفطار", "One food per line, e.g. 3 eggs": "طعام في كل سطر، مثال: 3 بيضات",
+  "Meal": "الوجبة", "What's in it": "مكوناتها", "＋ Add a meal": "＋ إضافة وجبة", "Edit their meal plan": "تعديل نظام أكله", "New meal plan": "نظام أكل جديد",
+  "New meal plan template": "قالب نظام أكل جديد", "Meal plan name": "اسم نظام الأكل", "Daily targets": "الأهداف اليومية",
+  "Calories and protein replace the client's own goals in the app.": "السعرات والبروتين يحلّان محل أهداف المتدرب نفسه في التطبيق.",
+  "Meals show up in the client's Meals tab, ready to log with one tap.": "تظهر الوجبات في تبويب الوجبات عند المتدرب، جاهزة للتسجيل بضغطة.",
+  "Name the meal plan first": "اكتب اسم نظام الأكل أولًا", "Name every meal": "اكتب اسم كل وجبة", "Add a target or a meal": "أضف هدفًا أو وجبة",
+  "Edit meal plan": "تعديل نظام الأكل", "Stop this meal plan": "إيقاف نظام الأكل هذا", "Meal plan stopped": "تم إيقاف نظام الأكل",
+  "No meal plan from you yet. The app uses their own goals.": "لا يوجد نظام أكل منك بعد، والتطبيق يستخدم أهدافه هو.",
+  "Write a program or meal plan once, then start from it on any client's page.": "اكتب البرنامج أو نظام الأكل مرة واحدة، وابدأ منه في صفحة أي متدرب.",
+  "Programs": "البرامج", "Meal plans": "أنظمة الأكل", "Delete": "حذف", "Template deleted": "تم حذف القالب", "1 day": "يوم واحد", "1 meal": "وجبة واحدة",
+  "No program templates yet.": "لا قوالب برامج بعد.", "No meal plan templates yet.": "لا قوالب أنظمة أكل بعد.",
+  "Program from your coach": "برنامج من الكابتن", "+ Add": "+ إضافة", "Your coach updated your program": "الكابتن حدّث برنامجك", "Your coach updated your meal plan": "الكابتن حدّث نظام أكلك"
 };
 
 var AR_DOW = { Sat: "السبت", Sun: "الأحد", Mon: "الاثنين", Tue: "الثلاثاء", Wed: "الأربعاء", Thu: "الخميس", Fri: "الجمعة" };
@@ -237,6 +259,9 @@ function unitAr(u) { return u === "kg" ? "كجم" : u === "cm" ? "سم" : u === 
 
 // [pattern, replacement]. Replacements get the match groups; trWord() keeps unknown names as they are.
 var AR_RULES = [
+  // sentences that carry a program name ("My Split: Push / Pull …") go first, before the name patterns below
+  [/^What they follow now: (.+)$/, function (m) { return "ما يتبعه الآن: " + T(m[1]); }],
+  [/^No program from you yet\. They follow (.+) in the app\.$/, function (m) { return "لا يوجد برنامج منك بعد. يتبع " + T(m[1]) + " في التطبيق."; }],
   [/^(\d+) of (\d+) sets complete$/, function (m) { return "المجموعات المكتملة: " + m[1] + " من " + m[2]; }],
   [/^(\d+) \/ (\d+) sets$/, function (m) { return m[1] + " / " + m[2] + " مجموعات"; }],
   [/^(\d+)% complete$/, function (m) { return "مكتمل " + m[1] + "%"; }],
@@ -407,6 +432,20 @@ var AR_RULES = [
   [/^(.+) (paused|resumed)$/, function (m) { return m[1] + ": " + (m[2] === "paused" ? "تم الإيقاف المؤقت" : "تم الاستئناف"); }],
   [/^Private notes about (.+)$/, function (m) { return "ملاحظات خاصة عن " + m[1]; }],
   [/^Expires in (\d+) days$/, function (m) { return "ينتهي بعد " + m[1] + " أيام"; }],
+  [/^Send to (.+)$/, function (m) { return "أرسله إلى " + m[1]; }],
+  [/^Sent to (.+)$/, function (m) { return "تم الإرسال إلى " + m[1]; }],
+  [/^Sent (\d.+)$/, function (m) { return "أُرسل " + arDate(m[1]); }],
+  [/^Remove (.+) and its exercises\?$/, function (m) { return "حذف " + m[1] + " وتمارينه؟"; }],
+  [/^(\d+) exercises$/, function (m) { return "التمارين: " + m[1]; }],
+  [/^(\d+) meals$/, function (m) { return "الوجبات: " + m[1]; }],
+  [/^([\d,]+) g carbs$/, function (m) { return m[1] + " جم كربوهيدرات"; }],
+  [/^([\d,]+) g fat$/, function (m) { return m[1] + " جم دهون"; }],
+  [/^Stop (.+) for (.+)\? They go back to their own program\.$/, function (m) { return "إيقاف " + m[1] + " لـ " + m[2] + "؟ سيعود إلى برنامجه الخاص."; }],
+  [/^Stop (.+) for (.+)\? Their own targets apply again\.$/, function (m) { return "إيقاف " + m[1] + " لـ " + m[2] + "؟ ستعود أهدافه الخاصة."; }],
+  [/^Delete the template (.+)\? What you already sent to clients stays\.$/, function (m) { return "حذف القالب " + m[1] + "؟ ما أرسلته للمتدربين يبقى كما هو."; }],
+  [/^Check the numbers for (.+)$/, function (m) { return "راجع الأرقام في " + m[1]; }],
+  [/^Program from Coach (.+)$/, function (m) { return "برنامج من الكابتن " + m[1]; }],
+  [/^New meal plan from your coach: (.+)$/, function (m) { return "نظام أكل جديد من الكابتن: " + m[1]; }],
   [/^Coach (.+)$/, function (m) { return "الكابتن " + m[1]; }],
   // general patterns last, so specific rules above win
   [/^(.+), set (\d+)$/, function (m) { return m[1] + "، المجموعة " + m[2]; }]
@@ -442,7 +481,7 @@ function T(s) {
   return out === core ? s : lead + out + trail;
 }
 
-var i18nObserver = null, I18N_ATTRS = ["placeholder", "aria-label", "title"];
+var i18nObserver = null, I18N_ATTRS = ["placeholder", "aria-label", "title", "label"];
 function trNode(n) {
   if (n.nodeType === 3) {
     var p = n.parentNode;

@@ -118,6 +118,11 @@ function renderTrain(root) {
   chips.appendChild(dayInd);
   root.appendChild(chips);
   placeDayInd(chips, dayInd);
+  var cp = state.programId === "coach" ? coachProgram() : null;
+  if (cp) root.appendChild(h("p", { class: "coach-prog" }, [
+    h("span", { text: sync.coach && sync.coach.name ? "Program from Coach " + sync.coach.name : "Program from your coach" }),
+    h("b", { text: cp.name, translate: "no" })
+  ]));
 
   // Program name + customize / change system
   var editDayBtn = h("button", { class: "btn ghost", type: "button", text: "✎ Edit exercises" });

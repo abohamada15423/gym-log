@@ -312,10 +312,13 @@ var ACCT_VIEWS = {
     var line = h("div", { class: "acct-sync", "data-phase": syncRt.phase, text: syncLine() });
     now.onclick = function () {
       busyBtn(now, true);
+      var t = $("toast"), before = t.hidden ? null : t.textContent;
       syncNow({ pull: true }).then(function (ok) {
         busyBtn(now, false); line.textContent = syncLine(); line.setAttribute("data-phase", syncRt.phase);
-        if (!ok && syncRt.phase === "signin") openAccount("signin", { email: sync.email });
-        else toast(ok ? "Up to date ✓" : syncRt.phase === "offline" ? "No connection. Check your internet and try again." : "Sync problem", 2400);
+        if (!ok && syncRt.phase === "signin") { openAccount("signin", { email: sync.email }); return; }
+        // news from the sync itself (say, the coach updated the program) matters more than "up to date"
+        if (ok && !t.hidden && t.textContent !== before) return;
+        toast(ok ? "Up to date ✓" : syncRt.phase === "offline" ? "No connection. Check your internet and try again." : "Sync problem", 2400);
       });
     };
     body.appendChild(h("div", { class: "acct-row" }, [line, now]));

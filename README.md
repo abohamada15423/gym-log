@@ -44,7 +44,7 @@ Tap the round button at the top right, or **Sign in or create account** on the P
 - Each save goes to the phone first. With an account, what changed uploads a moment later. Offline, it waits and uploads when the connection is back. The header says which: *Saved online ✓*, *Saved on this phone ✓*, or *Offline · will upload later*.
 - Changes from your other phones arrive when the app opens, comes back to the front, or every few minutes. If the same thing was edited in two places, the newest edit wins.
 - The first sign-in on a phone that already has data asks whether to add it to the account or keep it on the phone only.
-- **Join your coach** with the 12-character code they give you, or by opening their invite link (`…/gym-log/?invite=CODE`). Your coach's name shows in the header. A program from your coach becomes your active program, and their meal plan sets your daily calories and protein.
+- **Join your coach** with the 12-character code they give you, or by opening their invite link (`…/gym-log/?invite=CODE`). Your coach's name shows in the header. A program from your coach becomes your active program, named under the day tabs on Train. Their meal plan sets your daily calories and protein, and its meals show on the Meals tab under **From your coach**. The app tells you when your coach sends or changes either one.
 - Account settings: sync now, leave your coach, export your data, privacy policy ([privacy.html](privacy.html)), sign out (optionally clearing the phone) and delete the account.
 
 How it works is in [docs/coach-plan.md](docs/coach-plan.md) (section 5) and at the top of `js/sync.js`. The database is in [supabase/](supabase/README.md).
@@ -61,6 +61,9 @@ Coaches open **coach.html** (`…/gym-log/coach.html`), or **Open the coach dash
 
   Targets come from the coach's meal plan, otherwise the client's own goals. With no target or goal weight there is nothing to flag. Paused clients are listed separately, without flags.
 - **One client:** Summary (the same week card, calendar, records and muscle map the client sees), Workouts with every set and note, Meals day by day against the targets, Body charts and check-ins, and private **Notes** that only the coach sees. Pause, resume or remove the client. Removing ends the coach's access until the client accepts a new invite.
+- **Program:** write a program for the client and send it. Start from a blank one, the program they follow now, a built-in program or one of your templates. Days are edited with the app's own day editor and exercise library, thumbnails included. **Send** makes it their active program, and the app tells them. **Edit program** updates it in place, and **Stop this program** puts them back on their own program.
+- **Meal plan:** daily targets (calories, protein, carbs, fat) and meals with their foods, starting blank, from the app's example meals or from a template. Calories and protein replace the client's own goals, and the meals appear on their Meals tab, ready to log with one tap.
+- **Templates:** programs and meal plans with no client, written once and reused for anyone. **Save as template** in any editor, or write one on the Templates page.
 - **Invite a client:** makes a 12-character code and a link (`…/gym-log/?invite=CODE`) that works once for 7 days. Open codes can be withdrawn.
 
 Coaches only ever read their clients' data; the database doesn't let them change it. The dashboard signs in separately from the app, so signing in there doesn't sign the app in on the same device.
