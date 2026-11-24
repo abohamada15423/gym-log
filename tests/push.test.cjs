@@ -137,3 +137,50 @@ test('a browser the push service says is gone is forgotten; other failures are o
   assert.equal(del[0].url, 'https://db.example.co/rest/v1/push_subscriptions?endpoint=eq.' + encodeURIComponent(gone));
   assert.equal(del[0].init.headers.apikey, 'service-key');
 });
+
+// ---- the service worker (sw.js): showing a notification, and where a tap goes ----------------------
+const fs = require('node:fs');
+const vm = require('node:vm');
+function worker(windows) {
+  const on = {}, shown = [], opened = [], waits = [];
+  const self = {
+    location: { origin: 'https://example.github.io' },
+    registration: { scope: 'https://example.github.io/gym-log/', showNotification: async (title, o) => { shown.push({ title, o }); } },
+    clients: { matchAll: async () => windows, openWindow: async url => { opened.push(url); }, claim: async () => {} },
+    addEventListener: (type, fn) => { on[type] = fn; },
+    skipWaiting: async () => {}
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8'), { self, URL, Promise, caches: {}, fetch: () => Promise.reject(new Error('offline')) });
+  const fire = async (type, ev) => { ev.waitUntil = p => waits.push(p); on[type](ev); await Promise.all(waits.splice(0)); };
+  return { fire, shown, opened };
+}
+const plain = v => JSON.parse(JSON.stringify(v));  // objects made inside the worker's context
+const win = url => { const w = { url, posted: [], focused: 0, postMessage: m => w.posted.push(m), focus: async () => { w.focused++; return w; } }; return w; };
+const pushEvent = payload => ({ data: payload == null ? null : { json: () => payload, text: () => JSON.stringify(payload) } });
+
+test('a push shows the notification in its own language, and tells open pages something arrived', async () => {
+  const app = win('https://example.github.io/gym-log/'), sw = worker([app]);
+  await sw.fire('push', pushEvent({ title: 'الكابتن كريم', body: 'شغل ممتاز النهارده', url: './#comments', tag: 'comments-1', lang: 'ar' }));
+  assert.deepEqual(plain(sw.shown), [{ title: 'الكابتن كريم', o: { body: 'شغل ممتاز النهارده', icon: 'icon-192.png', badge: 'icon-192.png', tag: 'comments-1', renotify: true, data: { url: './#comments' }, lang: 'ar', dir: 'rtl' } }]);
+  assert.deepEqual(plain(app.posted), [{ type: 'push', tag: 'comments-1' }]);
+  // an empty push still shows something (browsers require it)
+  await sw.fire('push', pushEvent(null));
+  assert.equal(sw.shown[1].title, 'Gym Log');
+});
+
+test('a tap opens the page it points at, reusing a window that already shows it', async () => {
+  const note = url => ({ notification: { data: { url }, close() { } } });
+  // the coach page, while only the app is open: a new window on the coach page
+  const app = win('https://example.github.io/gym-log/index.html'), sw = worker([app]);
+  await sw.fire('notificationclick', note('coach.html#client=abc&tab=comments'));
+  assert.deepEqual(sw.opened, ['https://example.github.io/gym-log/coach.html#client=abc&tab=comments']);
+  assert.equal(app.focused, 0);
+  // the app's comments, with the app open: that window comes forward and is told where to go
+  await sw.fire('notificationclick', note('./#comments'));
+  assert.equal(app.focused, 1);
+  assert.deepEqual(plain(app.posted), [{ type: 'open', url: 'https://example.github.io/gym-log/#comments' }]);
+  // the rest timer's own notifications have no link: the app
+  const none = worker([]);
+  await none.fire('notificationclick', { notification: { close() { } } });
+  assert.deepEqual(none.opened, ['https://example.github.io/gym-log/']);
+});

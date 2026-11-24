@@ -566,16 +566,24 @@ async function syncPushOn() {
   sync.push = { endpoint: row.endpoint, lang: row.lang };
   saveSync();
 }
+// Off at once on this phone; if the server can't be told now (offline), it's told after the next sync.
 async function syncPushOff() {
   var p = sync.push;
-  sync.push = null; saveSync();
-  if (!p) return;
+  sync.push = null;
+  if (!p) { saveSync(); return; }
+  sync.pushDrop = p.endpoint; saveSync();
   await requireUser();
   var r = await syncApi.dropPush(sync.uid, p.endpoint);
   if (r.error) syncCheck(r);
+  if (sync.pushDrop === p.endpoint) { delete sync.pushDrop; saveSync(); }
 }
 // After start-up and a change of language: keep the saved subscription the same as this browser's.
 async function syncPushRefresh() {
+  if (sync.uid && sync.pushDrop) {
+    var was = sync.pushDrop, d = await syncApi.dropPush(sync.uid, was);
+    if (d.error) syncCheck(d);
+    if (sync.pushDrop === was) { delete sync.pushDrop; saveSync(); }
+  }
   if (!sync.uid || !sync.push) return;
   var old = sync.push, row = await pushCurrent();
   if (!row) {

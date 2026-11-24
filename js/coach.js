@@ -496,14 +496,14 @@ function tabWorkouts(body) {
     var nSets = 0; Object.keys(s.sets || {}).forEach(function (k) { nSets += s.sets[k].length; });
     var ex = h("ul", { class: "c-sets" });
     Object.keys(s.sets || {}).forEach(function (k) {
-      ex.appendChild(h("li", {}, [h("span", {}, [h("b", { class: "c-exname", text: k }), h("span", { class: "c-setnums", translate: "no", text: setLine(s.sets[k]) })]), s.notes && s.notes[k] ? h("small", { text: s.notes[k] }) : null]));
+      ex.appendChild(h("li", {}, [h("span", {}, [h("b", { class: "c-exname", text: k }), h("span", { class: "c-setnums", translate: "no", text: setLine(s.sets[k]) })]), s.notes && s.notes[k] ? h("small", { translate: "no", text: s.notes[k] }) : null]));
     });
     panel.appendChild(h("article", { class: "c-entry" }, [
       h("div", { class: "c-when" }, [h("b", { text: mbDay(s.date) }), h("small", { text: sessionName(s) })]),
       h("div", {}, [
         h("p", { class: "c-small c-quiet", text: nSets + " sets, " + Math.round(sessionVolume(s)).toLocaleString() + " kg volume" }),
         ex,
-        s.note ? h("p", { class: "c-said" }, [h("small", { text: "Their note" }), s.note]) : null,
+        s.note ? h("p", { class: "c-said" }, [h("small", { text: "Their note" }), h("span", { translate: "no", text: s.note })]) : null,
         commentBlock("session", s.id, { cta: "Comment on this workout", placeholder: "Your comment on this workout…" })
       ])
     ]));
@@ -641,7 +641,8 @@ function tabComments(body, c) {
     empty: "No comments yet. Write to " + c.name + " about anything: a workout, their meals or a check-in. Comments on a workout, a day of meals or a check-in show up here too."
   });
   body.appendChild(h("section", { class: "c-panel c-talk" }, [th]));
-  th.toEnd();
+  // a long thread: start at the newest, where the box to write in is
+  if (cmAll().length > 6 && th.input.scrollIntoView) th.input.scrollIntoView({ block: "nearest" });
 }
 // New comments while the page is open: the inbox every minute, and right away when a notification comes in.
 async function pollComments() {
@@ -670,13 +671,15 @@ document.addEventListener("visibilitychange", function () { if (document.visibil
 
 /* ---------- notifications in this browser (phase 4) ---------- */
 function bellOn() { return !!(C.me && coachPrefs.push && coachPrefs.push.uid === C.me.id) && typeof Notification !== "undefined" && Notification.permission === "granted"; }
+var BELL_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 16.5v-5a5.5 5.5 0 0111 0v5l1.6 2H4.9z"/><path d="M10 21h4"/></svg>';
+// One button, always called Notifications: pressed (lime) when this browser gets them.
 function paintBell() {
   var b = $("c-bell"); if (!b) return;
   b.hidden = !(C.phase === "ready" && C.me && pushSupported());
   if (b.hidden) return;
   var on = bellOn();
+  if (!b.firstChild) { b.innerHTML = BELL_SVG; b.appendChild(h("span", { text: "Notifications" })); }
   b.setAttribute("aria-pressed", String(on));
-  b.textContent = on ? "Notifications on" : "Turn on notifications";
   b.title = on ? "You get a notification when a client writes to you. Tap to turn it off." : "Get a notification when a client writes to you";
 }
 $("c-bell").onclick = function () {

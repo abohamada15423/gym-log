@@ -239,7 +239,7 @@ var AR_WORDS = {
   "No program templates yet.": "لا قوالب برامج بعد.", "No meal plan templates yet.": "لا قوالب أنظمة أكل بعد.",
   "Program from your coach": "برنامج من الكابتن", "+ Add": "+ إضافة", "Your coach updated your program": "الكابتن حدّث برنامجك", "Your coach updated your meal plan": "الكابتن حدّث نظام أكلك",
   // comments and notifications (phase 4)
-  "Today": "اليوم", "Yesterday": "أمس", "You": "أنت", "Reply": "رد", "Send": "إرسال", "Comment": "علّق", "Comments": "التعليقات", "About": "عن",
+  "Today": "اليوم", "Yesterday": "أمس", "You": "أنت", "Reply": "رد", "Add a comment": "أضف تعليقًا", "Send": "إرسال", "Comment": "علّق", "Comments": "التعليقات", "About": "عن",
   "Not sent": "لم يُرسل", "Sending…": "جارٍ الإرسال…", "Delete this comment?": "حذف هذا التعليق؟", "Couldn't delete. Try again.": "تعذّر الحذف. حاول مرة أخرى.",
   "Write a comment…": "اكتب تعليقًا…", "Your comment": "تعليقك", "Couldn't send. Try again.": "تعذّر الإرسال. حاول مرة أخرى.", "Not about this": "ليس عن هذا",
   "No comments yet.": "لا تعليقات بعد.", "A workout that was removed": "تمرين محذوف", "A check-in that was removed": "قياس محذوف",
@@ -264,7 +264,7 @@ var AR_WORDS = {
   "Remind me on training days": "ذكّرني في أيام التمرين", "Only on days you haven't trained yet": "فقط في الأيام التي لم تتمرن فيها بعد",
   "Training days": "أيام التمرين", "At": "الساعة", "Pick the days you train.": "اختر أيام تمرينك.",
   "You'll get one reminder at that time on each day you picked, unless you've already trained.": "يصلك تذكير واحد في هذا الوقت في كل يوم اخترته، إلا إذا كنت تمرنت بالفعل.",
-  "Sat": "السبت", "Sun": "الأحد", "Mon": "الاثنين", "Tue": "الثلاثاء", "Wed": "الأربعاء", "Thu": "الخميس", "Fri": "الجمعة",
+  "Saturday": "السبت", "Sunday": "الأحد", "Monday": "الاثنين", "Tuesday": "الثلاثاء", "Wednesday": "الأربعاء", "Thursday": "الخميس", "Friday": "الجمعة",
   "Waiting for your reply": "ينتظر ردك", "Comment on this workout": "علّق على هذا التمرين", "Your comment on this workout…": "تعليقك على هذا التمرين…",
   "Comment on this day": "علّق على هذا اليوم", "Your comment on this day's meals…": "تعليقك على وجبات هذا اليوم…", "Your comment on this check-in…": "تعليقك على هذا القياس…",
   "Notifications on": "الإشعارات تعمل", "Turn on notifications": "شغّل الإشعارات", "new": "جديد",

@@ -53,7 +53,8 @@ function cmNote(c, opts) {
   note.appendChild(h("div", { class: "cm-meta" }, [who, when]));
   var about = opts.about ? cmAbout(c) : null;
   if (about) note.appendChild(h("div", { class: "cm-about" }, [h("span", { text: about.join(" · ") })]));
-  note.appendChild(h("p", { class: "cm-body", translate: "no", text: c.body }));
+  // what people wrote: never translated, and laid out in its own direction (English in the Arabic app too)
+  note.appendChild(h("p", { class: "cm-body", translate: "no", dir: "auto", text: c.body }));
   var acts = [];
   if (opts.reply && !mine && c.type !== "general") {
     var rep = h("button", { class: "linkbtn", type: "button", text: "Reply" });
@@ -76,7 +77,7 @@ function cmNote(c, opts) {
 function cmComposer(opts) {
   opts = opts || {};
   var form = h("form", { class: "cm-compose" });
-  var ta = h("textarea", { rows: "2", maxlength: "2000", placeholder: opts.placeholder || "Write a comment…", "aria-label": opts.label || "Your comment" });
+  var ta = h("textarea", { rows: "2", maxlength: "2000", dir: "auto", placeholder: opts.placeholder || "Write a comment…", "aria-label": opts.label || "Your comment" });
   var go = h("button", { class: "btn sm", type: "submit", text: "Send" });
   form.onsubmit = function (e) {
     if (e) e.preventDefault();
@@ -110,11 +111,13 @@ function commentBlock(type, ref, opts) {
       var f = cmComposer({ placeholder: opts.placeholder, target: function () { return { type: type, ref: ref }; }, sent: function () { paint(false); if (opts.changed) opts.changed(); } });
       var cancel = h("button", { class: "linkbtn", type: "button", text: "Cancel" });
       cancel.onclick = function () { paint(false); };
-      f.appendChild(cancel);
+      f.insertBefore(cancel, f.lastChild);  // Cancel, then Send at the end of the line
       box.appendChild(f);
       f.input.focus();
     } else {
-      var open = h("button", { class: "linkbtn cm-open", type: "button", text: list.length ? "Reply" : (opts.cta || "Comment") });
+      // answer the other person; after your own words, add to them
+      var last = list[list.length - 1];
+      var open = h("button", { class: "linkbtn cm-open", type: "button", text: !last ? (opts.cta || "Comment") : cmMine(last) ? "Add a comment" : "Reply" });
       open.onclick = function () { paint(true); };
       box.appendChild(open);
     }

@@ -201,10 +201,11 @@ function paintNotifications(card) {
   rem.onclick = function () { setReminder(r.on ? { on: false } : { on: true, days: r.days.length ? r.days : guessDays() }); };
   card.appendChild(rem);
   if (!r.on) return;
-  // the week as it's lived here: Saturday first
+  // the week as it's lived here, Saturday first, labelled like the training calendar
   var days = h("div", { class: "rem-days", role: "group", "aria-label": "Training days" });
+  var short = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"], long = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   [6, 0, 1, 2, 3, 4, 5].forEach(function (d) {
-    var picked = r.days.indexOf(d) > -1, b = h("button", { class: "btn ghost", type: "button", "aria-pressed": String(picked), text: MB_DOW[d] });
+    var picked = r.days.indexOf(d) > -1, b = h("button", { class: "btn ghost", type: "button", "aria-pressed": String(picked), "aria-label": long[d], text: short[d] });
     b.onclick = function () { setReminder({ days: picked ? r.days.filter(function (x) { return x !== d; }) : r.days.concat([d]).sort() }); };
     days.appendChild(b);
   });
