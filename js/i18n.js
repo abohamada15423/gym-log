@@ -339,7 +339,7 @@ var AR_RULES = [
   [/^So far: (.+)$/, function (m) { return "حتى الآن: " + m[1].split(" · ").map(T).join(" · "); }],
   [/^On track: (.+?)( \+(\d+))?$/, function (m) { return "على المسار: " + m[1].split(", ").map(trWord).join("، ") + (m[3] ? " (+" + m[3] + ")" : ""); }],
   [/^High volume: (.+)$/, function (m) { return "حجم عالٍ: " + m[1].split(", ").map(trWord).join("، "); }],
-  [/^Below target: ([^·]+)$/, function (m) { return "أقل من الهدف: " + m[1].replace(/([A-Za-z][A-Za-z /]+?) −(\d+)/g, function (_, n, v) { return trWord(n) + " −" + v; }).replace(/ sets/, " مجموعات").replace(/\(\+(\d+) more\)/, "(+$1 أخرى)"); }],
+  [/^Below target: ([^·]+)$/, function (m) { return "أقل من الهدف: " + m[1].replace(/([A-Za-z][A-Za-z /]+?) −(\d+)/g, function (_, n, v) { return trWord(n) + " −" + v; }).replace(/, /g, "، ").replace(/ sets/, " مجموعات").replace(/\(\+(\d+) more\)/, "(+$1 أخرى)"); }],
   [/^Active, (\d+) days$/, function (m) { return "نشط، " + m[1] + " أيام"; }],
   [/^(\d+) days$/, function (m) { return m[1] + " أيام"; }],
   [/^Day (\d+)$/, function (m) { return "اليوم " + m[1]; }],
