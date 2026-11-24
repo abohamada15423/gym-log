@@ -111,8 +111,8 @@ var AR_WORDS = {
   "Enter valid kg & reps": "أدخل وزنًا وتكرارات صحيحة", "Undo this set before replacing its values": "ألغِ هذه المجموعة قبل تغيير قيمها",
   "Undo the last set before removing it": "ألغِ آخر مجموعة قبل حذفها", "Time for your next set": "حان وقت مجموعتك التالية", "Rest alerts are on ✓": "تنبيهات الراحة مفعّلة ✓",
   // muscles
-  "Upper Chest": "أعلى الصدر", "Lower Chest": "أسفل الصدر", "Back": "الظهر", "Lats": "المجنصات", "Upper Back": "أعلى الظهر", "Mid Back": "وسط الظهر", "Lower Back": "أسفل الظهر",
-  "Lats / upper back": "المجنصات / أعلى الظهر", "Traps": "الترابيس", "Shoulders": "الأكتاف", "Delts": "الدالية", "Front Delts": "الكتف الأمامي", "Side Delts": "الكتف الجانبي",
+  "Upper Chest": "أعلى الصدر", "Lower Chest": "أسفل الصدر", "Back": "الظهر", "Lats": "المجانص", "Upper Back": "أعلى الظهر", "Mid Back": "وسط الظهر", "Lower Back": "أسفل الظهر",
+  "Lats / upper back": "المجانص / أعلى الظهر", "Traps": "الترابيس", "Shoulders": "الأكتاف", "Delts": "الدالية", "Front Delts": "الكتف الأمامي", "Side Delts": "الكتف الجانبي",
   "Rear Delts": "الكتف الخلفي", "Front delts": "الكتف الأمامي", "Side delts": "الكتف الجانبي", "Rear delts": "الكتف الخلفي", "Rotators": "العضلات الدوّارة",
   "Biceps": "البايسبس", "Biceps Long Head": "الرأس الطويل للبايسبس", "Biceps Short Head": "الرأس القصير للبايسبس", "Biceps Peak": "قمة البايسبس", "Brachialis": "العضدية",
   "Triceps": "الترايسبس", "Triceps Long Head": "الرأس الطويل للترايسبس", "Forearms": "الساعد", "Brachioradialis": "العضدية الكعبرية",
@@ -189,7 +189,33 @@ var AR_WORDS = {
   "You need to be online to delete your account": "يجب أن تكون متصلًا بالإنترنت لحذف حسابك",
   "1 change waiting to upload": "تعديل واحد في انتظار الرفع", "1 item couldn't upload": "عنصر واحد لم يُرفع", "1 item kept on this phone only": "عنصر واحد على هذا الهاتف فقط",
   "Set by your coach": "حدّده الكابتن", "From your coach": "من الكابتن", "Coach's program": "برنامج الكابتن", "Meal plan": "نظام الأكل",
-  "Your data is also saved in your account.": "بياناتك محفوظة أيضًا في حسابك.", "Backup added to your account": "تمت إضافة النسخة إلى حسابك"
+  "Your data is also saved in your account.": "بياناتك محفوظة أيضًا في حسابك.", "Backup added to your account": "تمت إضافة النسخة إلى حسابك",
+  "Open the coach dashboard": "افتح لوحة الكابتن", "front": "أمام", "back": "خلف", "Nothing below target": "لا شيء أقل من الهدف", "Every major muscle is on target — well balanced.": "كل العضلات الأساسية على الهدف، توازن ممتاز.", "This is a coach account.": "هذا حساب كابتن.",
+  // coach dashboard (coach.html, js/coach.js)
+  "Gym Log Coach": "سجل الجيم للكابتن", "Loading…": "جارٍ التحميل…", "Couldn't load your clients": "تعذّر تحميل المتدربين", "Try again": "حاول مرة أخرى",
+  "Coach sign-in": "دخول الكابتن", "Use the account you made in the Gym Log app. The app's owner turns it into a coach account.": "استخدم الحساب الذي أنشأته في تطبيق سجل الجيم، وصاحب التطبيق يحوّله إلى حساب كابتن.",
+  "Enter your email and password": "أدخل بريدك وكلمة المرور", "Open the app": "افتح التطبيق", "to create an account or reset your password.": "لإنشاء حساب أو إعادة تعيين كلمة المرور.",
+  "This page is for coaches": "هذه الصفحة للكباتن",
+  "Clients": "المتدربون", "Invite a client": "ادعُ متدربًا", "No clients yet.": "لا يوجد متدربون بعد.", "Everyone is on track.": "الكل على المسار الصحيح.",
+  "1 client needs you today.": "متدرب واحد يحتاجك اليوم.",
+  "Invite your first client. They open the link on their phone, create an account and join you. Their workouts, meals and check-ins show up here.": "ادعُ أول متدرب. يفتح الرابط على هاتفه وينشئ حسابًا وينضم إليك، وتظهر هنا تمارينه ووجباته وقياساته.",
+  "Needs you": "يحتاجونك", "On track": "على المسار", "Paused": "متوقف مؤقتًا", "You can still see their log. They don't get flags while paused.": "ما زلت ترى سجلهم، ولا تظهر لهم تنبيهات أثناء الإيقاف.",
+  "Client": "المتدرب", "Last 7 days": "آخر 7 أيام", "Protein, daily average": "البروتين، متوسط يومي", "Flags": "تنبيهات",
+  "Active today": "نشِط اليوم", "Active yesterday": "نشِط أمس", "No activity yet": "لا نشاط بعد", "No meals logged": "لا وجبات مسجّلة", "No weigh-ins": "لا أوزان مسجّلة",
+  "No workout yet": "لا تمارين بعد", "No check-in yet": "لا قياسات بعد", "Protein under 80% for 3 days": "البروتين أقل من 80% لمدة 3 أيام",
+  "Weight moving away from the goal for 2 weeks": "الوزن يبتعد عن الهدف منذ أسبوعين", "1 workout": "تمرين واحد",
+  "Resume": "استئناف", "Pause": "إيقاف مؤقت", "Remove client": "إزالة المتدرب", "‹ All clients": "‹ كل المتدربين",
+  "Summary": "ملخص", "Notes": "ملاحظات", "Needs attention": "يحتاج انتباهك", "Your program for them": "برنامجك له",
+  "No workouts logged yet.": "لا تمارين مسجّلة بعد.", "Their note": "ملاحظته",
+  "Targets from your meal plan.": "الأهداف من نظام الأكل الذي وضعته.", "Targets the client set.": "الأهداف التي حددها المتدرب.",
+  "No targets yet. They come from your meal plan, or the client's own goals.": "لا أهداف بعد. تأتي من نظام الأكل الذي تضعه أو من أهداف المتدرب نفسه.",
+  "No meals logged in the last 4 months.": "لا وجبات مسجّلة في آخر 4 أشهر.", "No check-ins yet.": "لا قياسات بعد.", "Check-ins": "القياسات", "One check-in so far": "قياس واحد حتى الآن",
+  "Injuries, goals, what you agreed, how they're doing…": "الإصابات، الأهداف، ما اتفقتما عليه، حاله…", "Only you see these notes.": "أنت فقط ترى هذه الملاحظات.",
+  "Saving…": "جارٍ الحفظ…", "Saved. Only you see these notes.": "تم الحفظ. أنت فقط ترى هذه الملاحظات.",
+  "Send this link. Your client opens it on their phone, creates an account and joins you. Or they type the code in the app.": "أرسل هذا الرابط. يفتحه المتدرب على هاتفه وينشئ حسابًا وينضم إليك، أو يكتب الكود في التطبيق.",
+  "Copy link": "نسخ الرابط", "Link copied": "تم نسخ الرابط", "Share": "مشاركة", "It works once and expires in 7 days.": "يعمل مرة واحدة وتنتهي صلاحيته بعد 7 أيام.",
+  "Make an invite code": "أنشئ كود دعوة", "Each code works for one client, once, for 7 days.": "كل كود لمتدرب واحد، مرة واحدة، لمدة 7 أيام.",
+  "Loading your open codes…": "جارٍ تحميل أكوادك المفتوحة…", "Open codes": "الأكواد المفتوحة", "Withdraw": "سحب", "Code withdrawn": "تم سحب الكود", "Expires in 1 day": "ينتهي بعد يوم واحد"
 };
 
 var AR_DOW = { Sat: "السبت", Sun: "الأحد", Mon: "الاثنين", Tue: "الثلاثاء", Wed: "الأربعاء", Thu: "الخميس", Fri: "الجمعة" };
@@ -309,7 +335,11 @@ var AR_RULES = [
   [/^(.+) · (\d+) exercises · (\d+) sets$/, function (m) { return arDate(m[1]) + " · " + m[2] + " تمارين · " + m[3] + " مجموعات"; }],
   [/^(.+): (\d+(?:\.\d)?) sets, (none|low|almost|optimal|high)(\. Tap for details)?$/, function (m) { return trWord(m[1]) + ": " + m[2] + " مجموعات، " + trWord(m[3]) + (m[4] ? ". اضغط للتفاصيل" : ""); }],
   [/^(\d+(?:[–-]\d+)?\+?) · (none|low|almost|optimal|high)$/, function (m) { return m[1] + " · " + trWord(m[2]); }],
-  [/^Below target: (.+)$/, function (m) { return "أقل من الهدف: " + m[1].replace(/([A-Za-z][A-Za-z /]+?) −(\d+)/g, function (_, n, v) { return trWord(n) + " −" + v; }).replace(/ sets/, " مجموعات").replace(/\(\+(\d+) more\)/, "(+$1 أخرى)"); }],
+  // the muscle map's note early in the week ("So far: Below target: … · On track: …")
+  [/^So far: (.+)$/, function (m) { return "حتى الآن: " + m[1].split(" · ").map(T).join(" · "); }],
+  [/^On track: (.+?)( \+(\d+))?$/, function (m) { return "على المسار: " + m[1].split(", ").map(trWord).join("، ") + (m[3] ? " (+" + m[3] + ")" : ""); }],
+  [/^High volume: (.+)$/, function (m) { return "حجم عالٍ: " + m[1].split(", ").map(trWord).join("، "); }],
+  [/^Below target: ([^·]+)$/, function (m) { return "أقل من الهدف: " + m[1].replace(/([A-Za-z][A-Za-z /]+?) −(\d+)/g, function (_, n, v) { return trWord(n) + " −" + v; }).replace(/, /g, "، ").replace(/ sets/, " مجموعات").replace(/\(\+(\d+) more\)/, "(+$1 أخرى)"); }],
   [/^Active, (\d+) days$/, function (m) { return "نشط، " + m[1] + " أيام"; }],
   [/^(\d+) days$/, function (m) { return m[1] + " أيام"; }],
   [/^Day (\d+)$/, function (m) { return "اليوم " + m[1]; }],
@@ -357,6 +387,26 @@ var AR_RULES = [
     var n = s.match(/Backup: (\d+) workouts?, (\d+) check-ins?/);
     return "إضافة هذه النسخة إلى حسابك؟\n\nالنسخة: " + (n ? n[1] + " تمارين، " + n[2] + " قياسات" : "") + ".\n\nما في حسابك يبقى كما هو، وإذا كان العنصر نفسه في النسخة تُستخدم نسخته.";
   }],
+  // coach dashboard
+  [/^(\d+) clients need you today\.$/, function (m) { return "متدربون يحتاجونك اليوم: " + m[1] + "."; }],
+  [/^Active (\d+) days ago$/, function (m) { return "نشِط منذ " + m[1] + " يوم"; }],
+  [/^(\d+) of (\d+)$/, function (m) { return m[1] + " من " + m[2]; }],
+  [/^of ([\d,]+) g$/, function (m) { return "من " + m[1] + " جم"; }],
+  [/^([\d,]+) kcal$/, function (m) { return m[1] + " سعرة"; }],
+  [/^of ([\d,]+) kcal$/, function (m) { return "من " + m[1] + " سعرة"; }],
+  [/^([\d,]+) g protein$/, function (m) { return m[1] + " جم بروتين"; }],
+  [/^of ([\d,]+) g protein$/, function (m) { return "من " + m[1] + " جم بروتين"; }],
+  [/^([\d.]+) kcal, ([\d.]+) g protein$/, function (m) { return m[1] + " سعرة، " + m[2] + " جم بروتين"; }],
+  [/^([▲▼] )?([\d.]+) kg in 2 weeks$/, function (m) { return (m[1] || "") + m[2] + " كجم في أسبوعين"; }],
+  [/^No workout for (\d+) days$/, function (m) { return "بدون تمرين منذ " + m[1] + " يوم"; }],
+  [/^No check-in for (\d+) days$/, function (m) { return "بدون قياس منذ " + m[1] + " يوم"; }],
+  [/^(\d+) sets, ([\d,]+) kg volume$/, function (m) { return m[1] + " مجموعات، حجم " + m[2] + " كجم"; }],
+  [/^Client since (.+)$/, function (m) { return "متدرب منذ " + arDate(m[1]); }],
+  [/^You're signed in as (.+)\. Ask the app's owner to make this a coach account, then reload this page\.$/, function (m) { return "أنت مسجّل الدخول بحساب " + m[1] + ". اطلب من صاحب التطبيق أن يجعله حساب كابتن، ثم أعد تحميل الصفحة."; }],
+  [/^Remove (.+) from your clients\? You'll stop seeing their log\. They can join you again with a new invite\.$/, function (m) { return "إزالة " + m[1] + " من متدربيك؟ لن ترى سجله بعد ذلك، ويمكنه الانضمام إليك مرة أخرى بدعوة جديدة."; }],
+  [/^(.+) (paused|resumed)$/, function (m) { return m[1] + ": " + (m[2] === "paused" ? "تم الإيقاف المؤقت" : "تم الاستئناف"); }],
+  [/^Private notes about (.+)$/, function (m) { return "ملاحظات خاصة عن " + m[1]; }],
+  [/^Expires in (\d+) days$/, function (m) { return "ينتهي بعد " + m[1] + " أيام"; }],
   [/^Coach (.+)$/, function (m) { return "الكابتن " + m[1]; }],
   // general patterns last, so specific rules above win
   [/^(.+), set (\d+)$/, function (m) { return m[1] + "، المجموعة " + m[2]; }]

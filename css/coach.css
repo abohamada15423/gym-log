@@ -1,0 +1,158 @@
+/* Coach dashboard (coach.html). Builds on css/app.css: same tokens, fonts, cards, buttons, charts.
+   Desktop and tablet first, one column on phones. Lime still means done or live; gold means a client
+   needs the coach. The one bold thing is the week tally borrowed from the Train tab. */
+
+body.coach-page { padding: 0 0 calc(48px + env(safe-area-inset-bottom, 0px)) }
+
+/* top bar */
+.c-top { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) 12px max(20px, env(safe-area-inset-left, 0px));
+  background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line) }
+.c-brand { display: inline-flex; align-items: baseline; gap: 10px; color: var(--ink); text-decoration: none }
+.c-brand b { font: 800 1.55rem/1 var(--f-display) }
+.c-brand span { font: 700 .78rem var(--f-body); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px }
+.c-top-r { display: flex; align-items: center; gap: 8px }
+.c-brand b, .c-top-r .btn, .c-lang { white-space: nowrap }
+.c-lang { background: none; border: 0; color: var(--muted); font: 600 .9rem var(--f-body); padding: 8px; cursor: pointer }
+.c-lang[lang="ar"] { font-family: "IBM Plex Sans Arabic", var(--f-body) }
+.c-lang:focus-visible, .c-back:focus-visible, .c-tabs a:focus-visible, .crow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+.c-main { max-width: 1140px; margin: 0 auto; padding: 28px max(20px, env(safe-area-inset-right, 0px)) 0 max(20px, env(safe-area-inset-left, 0px)) }
+.c-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px }
+.c-h1 { font: 800 clamp(2.2rem, 4vw, 3rem)/.95 var(--f-display); margin: 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
+.c-h1 .pill { font-size: .8rem }
+.c-h2 { font: 800 1.45rem/1 var(--f-display); margin: 30px 0 10px; display: flex; align-items: baseline; gap: 10px }
+.c-count { font: 700 .95rem var(--f-body); color: var(--muted) }
+.c-lead { margin: 8px 0 0; color: var(--muted); font-size: 1rem }
+.c-facts { display: flex; flex-wrap: wrap; gap: 4px 18px }
+.c-quiet { color: var(--muted) }
+.c-small { font-size: .86rem }
+.c-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; display: flex; flex-direction: column; gap: 14px }
+.c-narrow { max-width: 460px; margin: 6vh auto 0 }
+.c-narrow p { margin: 0 }
+.c-narrow a:not(.btn) { color: var(--accent); font-weight: 700 }
+.c-empty { max-width: 560px; align-items: flex-start }
+.c-empty p { margin: 0; color: var(--ink); line-height: 1.5 }
+.c-actions { display: flex; gap: 8px; flex-wrap: wrap }
+.c-danger { color: var(--warn) }
+.c-back { display: inline-block; margin-bottom: 14px; color: var(--muted); text-decoration: none; font-weight: 600 }
+.c-back:hover { color: var(--ink) }
+
+/* the roster: one panel, a row per client, hairlines between them */
+.c-roster { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden }
+.crow { display: grid; grid-template-columns: minmax(190px, 1.35fr) 150px 170px 165px minmax(190px, 1.4fr); gap: 18px; align-items: center;
+  padding: 15px 20px; color: var(--ink); text-decoration: none; border-top: 1px solid var(--line) }
+.crow:first-child { border-top: 0 }
+a.crow:hover { background: var(--surface-2) }
+.c-colhead { padding-top: 11px; padding-bottom: 11px; background: var(--sil) }
+.c-colhead .c-col { font: 600 .78rem var(--f-body); color: var(--muted) }
+.c-col { min-width: 0; display: flex; flex-direction: column; gap: 3px }
+.c-col small { color: var(--muted); font-size: .84rem }
+.c-col b { font: 800 1.25rem/1 var(--f-display) }
+.c-who { flex-direction: row; align-items: center; gap: 12px }
+.c-who > div { display: flex; flex-direction: column; gap: 3px; min-width: 0 }
+.c-who b { font: 700 1rem/1.2 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.crow.needs .acct-av { border-color: var(--gold); color: var(--gold) }
+.c-kg .good { color: var(--accent) }
+.c-kg .bad { color: var(--gold) }
+.c-ok { color: var(--muted) }
+
+/* the week, as the Train tab's tally: one mark per planned workout, lime when done */
+.wtally { display: inline-flex; gap: 3px; height: 22px; align-items: flex-end }
+.wtally i { width: 9px; height: 22px; border-radius: 2px; background: var(--surface-3) }
+.wtally i.on { background: var(--accent) }
+@media (prefers-reduced-motion: no-preference) {
+  .tally-in .wtally i.on { transform-origin: bottom; animation: tally-fill .5s var(--spring) both; animation-delay: calc(.15s + var(--k) * .07s) }
+}
+
+/* protein against the target */
+.c-bar { display: block; height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin-top: 3px; max-width: 150px }
+.c-bar > i { display: block; height: 100%; background: var(--ink); border-radius: 3px }
+.c-bar.low > i { background: var(--gold) }
+.c-bar.over > i { background: var(--gold) }
+
+/* flags: gold, because a coach should look */
+.c-flags { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px }
+.c-flags li { font: 600 .88rem/1.3 var(--f-body); color: var(--gold); padding-inline-start: 14px; position: relative }
+.c-flags li::before { content: ""; position: absolute; inset-inline-start: 0; top: .45em; width: 6px; height: 6px; border-radius: 50%; background: var(--gold) }
+
+/* one client */
+.c-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin: 0 0 22px; overflow-x: auto; scrollbar-width: none }
+.c-tabs a { padding: 10px 0 12px; color: var(--muted); text-decoration: none; font: 700 1rem var(--f-body); white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -1px }
+.c-tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent) }
+.c-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; align-items: start }
+/* summary: the client's week, calendar and records on the left; the muscle map, which is tall, on the right */
+.c-sum { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; align-items: start }
+.c-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0 }
+.c-alert { border-color: color-mix(in srgb, var(--gold) 45%, var(--line)); display: flex; flex-direction: column; gap: 10px }
+.c-alert > b { font: 800 1.2rem/1 var(--f-display) }
+.c-note-card { display: flex; flex-direction: column; gap: 4px }
+.c-note-card small { color: var(--muted) }
+.c-note-card b { font: 800 1.35rem/1.1 var(--f-display) }
+
+/* workouts, meals and check-ins: dated entries in one panel */
+.c-log .c-entry, .c-log .c-day > summary { display: grid; grid-template-columns: 170px 1fr; gap: 18px; padding: 15px 20px; border-top: 1px solid var(--line) }
+.c-log > :first-child.c-entry, .c-log > .c-day:first-child > summary { border-top: 0 }
+.c-entry p { margin: 0 }
+.c-when { display: flex; flex-direction: column; gap: 2px }
+.c-when b { font-weight: 700 }
+.c-when small { color: var(--muted) }
+.c-sets { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px }
+.c-sets li { display: flex; flex-direction: column; gap: 1px }
+.c-sets small { color: var(--muted) }
+.c-sets li > span { display: flex; flex-wrap: wrap; gap: 2px 10px }
+.c-exname { font-weight: 600 }
+.c-setnums { color: var(--ink); font-variant-numeric: tabular-nums }
+.c-metrics { display: flex; flex-wrap: wrap; gap: 8px 22px }
+.c-metrics span { display: flex; flex-direction: column; gap: 1px }
+.c-metrics small { color: var(--muted); font-size: .8rem }
+.c-one { display: block; margin-top: 6px; color: var(--muted) }
+.c-said { margin-top: 10px !important; padding: 10px 12px; background: var(--surface-2); border-radius: 12px; display: flex; flex-direction: column; gap: 3px }
+.c-said small { color: var(--muted) }
+.c-day > summary { grid-template-columns: 170px minmax(0, 230px) minmax(0, 230px) !important; cursor: pointer; list-style: none }
+.c-day > summary::-webkit-details-marker { display: none }
+.c-day[open] > summary { background: var(--surface-2) }
+.c-day > .c-sets { padding: 4px 20px 16px; margin: 0 }
+.c-meter { display: flex; flex-direction: column; gap: 2px }
+.c-meter b { font: 800 1.15rem/1 var(--f-display) }
+.c-meter small { color: var(--muted) }
+
+/* notes */
+.c-notes { width: 100%; min-height: 260px; resize: vertical; padding: 14px; font: 400 1rem/1.55 var(--f-body); background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 14px }
+.c-notes:focus { outline: none; border-color: var(--accent) }
+
+/* invites */
+/* the code is Latin letters: it keeps the narrow display face and its spacing in Arabic too, on one line */
+.inv-code, :root[lang="ar"] .inv-code { font: 800 clamp(2.1rem, 8.5vw, 2.9rem)/1 "Big Shoulders Display", "Arial Narrow", sans-serif; letter-spacing: .1em !important; white-space: nowrap; direction: ltr; text-align: center; padding: 18px 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 16px }
+.inv-link { margin: 0; font-size: .86rem; color: var(--muted); word-break: break-all; text-align: center; direction: ltr }
+.inv-open { display: flex; flex-direction: column; gap: 8px }
+.inv-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line) }
+.inv-row > div { display: flex; flex-direction: column; gap: 2px }
+.inv-row b, :root[lang="ar"] .inv-row b { font: 800 1.15rem/1 "Big Shoulders Display", "Arial Narrow", sans-serif; letter-spacing: .06em !important; direction: ltr; unicode-bidi: isolate }
+.inv-row small { color: var(--muted) }
+
+/* tablets: flags move under the numbers */
+@media (max-width: 980px) {
+  .crow { grid-template-columns: minmax(180px, 1.3fr) 140px 150px 150px }
+  .c-colhead .c-col:last-child { display: none }
+  .c-flagcol { grid-column: 1 / -1; padding-inline-start: 56px }
+  .c-flagcol .c-ok { display: none }
+}
+/* phones: a block per client */
+@media (max-width: 640px) {
+  .c-top { padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)) }
+  .c-brand span { display: none }
+  .c-main { padding-top: 20px }
+  .c-head { align-items: stretch; flex-direction: column }
+  .c-head > .btn { width: 100% }
+  .c-colhead { display: none }
+  .crow { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; padding: 14px 16px }
+  .c-who, .c-flagcol { grid-column: 1 / -1 }
+  .c-flagcol { padding-inline-start: 0 }
+  .c-col b { font-size: 1.1rem }
+  .c-log .c-entry, .c-log .c-day > summary { grid-template-columns: 1fr; gap: 8px; padding: 14px 16px }
+  .c-day > summary { grid-template-columns: 1fr 1fr !important }
+  .c-day > summary .c-when { grid-column: 1 / -1 }
+  .c-grid { grid-template-columns: 1fr }
+}
+@media (max-width: 860px) { .c-sum { grid-template-columns: 1fr } }
