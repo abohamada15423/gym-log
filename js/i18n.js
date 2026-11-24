@@ -237,7 +237,41 @@ var AR_WORDS = {
   "Write a program or meal plan once, then start from it on any client's page.": "اكتب البرنامج أو نظام الأكل مرة واحدة، وابدأ منه في صفحة أي متدرب.",
   "Programs": "البرامج", "Meal plans": "أنظمة الأكل", "Delete": "حذف", "Template deleted": "تم حذف القالب", "1 day": "يوم واحد", "1 meal": "وجبة واحدة",
   "No program templates yet.": "لا قوالب برامج بعد.", "No meal plan templates yet.": "لا قوالب أنظمة أكل بعد.",
-  "Program from your coach": "برنامج من الكابتن", "+ Add": "+ إضافة", "Your coach updated your program": "الكابتن حدّث برنامجك", "Your coach updated your meal plan": "الكابتن حدّث نظام أكلك"
+  "Program from your coach": "برنامج من الكابتن", "+ Add": "+ إضافة", "Your coach updated your program": "الكابتن حدّث برنامجك", "Your coach updated your meal plan": "الكابتن حدّث نظام أكلك",
+  // comments and notifications (phase 4)
+  "Today": "اليوم", "Yesterday": "أمس", "You": "أنت", "Reply": "رد", "Send": "إرسال", "Comment": "علّق", "Comments": "التعليقات", "About": "عن",
+  "Not sent": "لم يُرسل", "Sending…": "جارٍ الإرسال…", "Delete this comment?": "حذف هذا التعليق؟", "Couldn't delete. Try again.": "تعذّر الحذف. حاول مرة أخرى.",
+  "Write a comment…": "اكتب تعليقًا…", "Your comment": "تعليقك", "Couldn't send. Try again.": "تعذّر الإرسال. حاول مرة أخرى.", "Not about this": "ليس عن هذا",
+  "No comments yet.": "لا تعليقات بعد.", "A workout that was removed": "تمرين محذوف", "A check-in that was removed": "قياس محذوف",
+  "Write something first": "اكتب شيئًا أولًا", "New comment from your coach": "تعليق جديد من الكابتن", "Open": "افتح",
+  "You don't have a coach right now. Your earlier comments stay here.": "ليس لديك كابتن الآن، وتعليقاتك السابقة باقية هنا.",
+  "Write to your coach…": "اكتب للكابتن…", "Comment for your coach": "تعليق للكابتن",
+  "No comments yet. Ask your coach about a workout, your meals or anything else.": "لا تعليقات بعد. اسأل الكابتن عن تمرين أو وجباتك أو أي شيء آخر.",
+  "Ask your coach about this workout": "اسأل الكابتن عن هذا التمرين", "Ask your coach about this workout…": "اسأل الكابتن عن هذا التمرين…",
+  "1 comment": "تعليق واحد", "1 new comment": "تعليق جديد واحد",
+  "Comment on this day's meals": "علّق على وجبات هذا اليوم", "Tell your coach about this day's meals…": "اكتب للكابتن عن وجبات هذا اليوم…",
+  "Tell your coach about this check-in…": "اكتب للكابتن عن هذا القياس…", "Comment on this check-in": "علّق على هذا القياس",
+  "Notifications": "الإشعارات", "Notifications on this phone": "الإشعارات على هذا الهاتف",
+  "Comments from your coach, new programs, and training reminders": "تعليقات الكابتن والبرامج الجديدة وتذكيرات التمرين",
+  "Training reminders, and comments once you have a coach": "تذكيرات التمرين، وتعليقات الكابتن عندما يكون لديك كابتن",
+  "Notifications off on this phone": "أُوقفت الإشعارات على هذا الهاتف", "Notifications on ✓": "الإشعارات تعمل ✓",
+  "Notifications are blocked for Gym Log. Allow them in your browser or phone settings, then turn them on here.": "الإشعارات محظورة لسجل الجيم. اسمح بها من إعدادات المتصفح أو الهاتف، ثم شغّلها من هنا.",
+  "On iPhone, notifications work once Gym Log is on your Home Screen: tap Share, then Add to Home Screen, and open it from there.": "على الآيفون تعمل الإشعارات بعد إضافة سجل الجيم إلى الشاشة الرئيسية: اضغط مشاركة، ثم إضافة إلى الشاشة الرئيسية، وافتحه من هناك.",
+  "This browser can't show notifications from Gym Log.": "هذا المتصفح لا يعرض إشعارات سجل الجيم.",
+  "On iPhone, add Gym Log to your Home Screen first, then open it from there.": "على الآيفون، أضف سجل الجيم إلى الشاشة الرئيسية أولًا، ثم افتحه من هناك.",
+  "Notifications are blocked. Allow them for this site in your browser or phone settings.": "الإشعارات محظورة. اسمح بها لهذا الموقع من إعدادات المتصفح أو الهاتف.",
+  "Couldn't turn notifications on. Try again.": "تعذّر تشغيل الإشعارات. حاول مرة أخرى.",
+  "Remind me on training days": "ذكّرني في أيام التمرين", "Only on days you haven't trained yet": "فقط في الأيام التي لم تتمرن فيها بعد",
+  "Training days": "أيام التمرين", "At": "الساعة", "Pick the days you train.": "اختر أيام تمرينك.",
+  "You'll get one reminder at that time on each day you picked, unless you've already trained.": "يصلك تذكير واحد في هذا الوقت في كل يوم اخترته، إلا إذا كنت تمرنت بالفعل.",
+  "Sat": "السبت", "Sun": "الأحد", "Mon": "الاثنين", "Tue": "الثلاثاء", "Wed": "الأربعاء", "Thu": "الخميس", "Fri": "الجمعة",
+  "Waiting for your reply": "ينتظر ردك", "Comment on this workout": "علّق على هذا التمرين", "Your comment on this workout…": "تعليقك على هذا التمرين…",
+  "Comment on this day": "علّق على هذا اليوم", "Your comment on this day's meals…": "تعليقك على وجبات هذا اليوم…", "Your comment on this check-in…": "تعليقك على هذا القياس…",
+  "Notifications on": "الإشعارات تعمل", "Turn on notifications": "شغّل الإشعارات", "new": "جديد",
+  "Get a notification when a client writes to you": "يصلك إشعار عندما يكتب لك متدرب",
+  "You get a notification when a client writes to you. Tap to turn it off.": "يصلك إشعار عندما يكتب لك متدرب. اضغط لإيقافه.",
+  "Notifications off in this browser": "أُوقفت الإشعارات في هذا المتصفح",
+  "Notifications on ✓ You'll hear when a client writes to you.": "الإشعارات تعمل ✓ سيصلك إشعار عندما يكتب لك متدرب."
 };
 
 var AR_DOW = { Sat: "السبت", Sun: "الأحد", Mon: "الاثنين", Tue: "الثلاثاء", Wed: "الأربعاء", Thu: "الخميس", Fri: "الجمعة" };
@@ -259,6 +293,15 @@ function unitAr(u) { return u === "kg" ? "كجم" : u === "cm" ? "سم" : u === 
 
 // [pattern, replacement]. Replacements get the match groups; trWord() keeps unknown names as they are.
 var AR_RULES = [
+  // comments: counts, and sentences that carry a client's name
+  [/^(\d+) new comments from your coach$/, function (m) { return "تعليقات جديدة من الكابتن: " + m[1]; }],
+  [/^(\d+) new comments$/, function (m) { return "تعليقات جديدة: " + m[1]; }],
+  [/^(\d+) comments$/, function (m) { return "التعليقات: " + m[1]; }],
+  [/^(\d+) new$/, function (m) { return m[1] + " جديد"; }],
+  [/^Write to (.+)…$/, function (m) { return "اكتب لـ" + m[1] + "…"; }],
+  [/^Comment for (.+)$/, function (m) { return "تعليق لـ" + m[1]; }],
+  [/^No comments yet\. Write to (.+) about anything: a workout, their meals or a check-in\. Comments on a workout, a day of meals or a check-in show up here too\.$/,
+    function (m) { return "لا تعليقات بعد. اكتب لـ" + m[1] + " عن أي شيء: تمرين أو وجباته أو قياس. والتعليقات على تمرين أو يوم أكل أو قياس تظهر هنا أيضًا."; }],
   // sentences that carry a program name ("My Split: Push / Pull …") go first, before the name patterns below
   [/^What they follow now: (.+)$/, function (m) { return "ما يتبعه الآن: " + T(m[1]); }],
   [/^No program from you yet\. They follow (.+) in the app\.$/, function (m) { return "لا يوجد برنامج منك بعد. يتبع " + T(m[1]) + " في التطبيق."; }],

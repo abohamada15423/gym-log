@@ -19,12 +19,18 @@ const stable = v => v === null || typeof v !== 'object' ? JSON.stringify(v ?? nu
 
 function fakeServer() {
   let clock = Date.now();
-  const names = ['workout_sessions', 'food_logs', 'body_checkins', 'habit_days', 'client_settings', 'programs', 'meal_plans'];
+  const names = ['workout_sessions', 'food_logs', 'body_checkins', 'habit_days', 'client_settings', 'programs', 'meal_plans', 'comments'];
   const tables = Object.fromEntries(names.map(n => [n, new Map()]));
   const pk = (t, r) => t === 'habit_days' ? r.client_id + '|' + r.date : t === 'client_settings' ? r.client_id + '|' + r.key : r.id;
   const s = {
     tables, offline: false, session: ME, profiles: new Map([[ME.id, { id: ME.id, full_name: 'Sara Ali', role: 'client' }]]),
-    links: [], refuse: () => false, requests: 0,
+    links: [], refuse: () => false, requests: 0, pushes: new Map(),
+    // the coach writes in the thread (on the coach page)
+    coachSays(body, type = 'general', ref = null, id = require('node:crypto').randomUUID()) {
+      const now = s.now();
+      tables.comments.set(id, { id, client_id: ME.id, author_id: COACH, target_type: type, target_ref: ref, body, read_at: null, deleted_at: null, created_at: now, updated_at: now });
+      return id;
+    },
     now() { clock = Math.max(clock + 3, Date.now()); return iso(clock); },
     rows(t) { return [...tables[t].values()]; },
     // a write, with the trigger's rules
@@ -74,10 +80,33 @@ function fakeServer() {
         return { data: COACH, error: null, status: 200 };
       }
       if (name === 'delete_my_account') { names.forEach(n => s.rows(n).forEach(r => { if (r.client_id === s.session.id) tables[n].delete(pk(n, r)); })); return { data: null, error: null, status: 204 }; }
+      if (name === 'mark_comments_read') {
+        if (s.offline) return down();
+        s.requests++;
+        s.rows('comments').forEach(r => { if (r.client_id === args.p_client && r.author_id !== s.session.id && !r.read_at && (!args.p_ids || args.p_ids.includes(r.id))) { const now = s.now(); tables.comments.set(r.id, { ...r, read_at: now, updated_at: now }); } });
+        return { data: 1, error: null, status: 200 };
+      }
       return { data: null, error: { code: 'PGRST202', message: 'no such function' }, status: 404 };
     },
     photos: async () => ({ data: [], error: null }),
-    removePhotos: async () => ({ data: [], error: null })
+    removePhotos: async () => ({ data: [], error: null }),
+    addComment: async row => {
+      s.requests++;
+      if (s.offline) return down();
+      if (tables.comments.has(row.id)) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' }, status: 409 };
+      const now = s.now();
+      tables.comments.set(row.id, { ...json(row), read_at: null, deleted_at: null, created_at: now, updated_at: now });
+      return { data: null, error: null, status: 201 };
+    },
+    removeComment: async id => {
+      s.requests++;
+      if (s.offline) return down();
+      const r = tables.comments.get(id);
+      if (r) { const now = s.now(); tables.comments.set(id, { ...r, deleted_at: now, updated_at: now }); }
+      return { data: null, error: null, status: 204 };
+    },
+    savePush: async row => { if (s.offline) return down(); s.pushes.set(row.user_id + '|' + row.endpoint, json(row)); return { data: null, error: null, status: 201 }; },
+    dropPush: async (uid, endpoint) => { if (s.offline) return down(); s.pushes.delete(uid + '|' + endpoint); return { data: null, error: null, status: 204 }; }
   };
   return s;
 }

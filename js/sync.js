@@ -24,18 +24,22 @@ var SYNC_TABLES = {
 // Written by the coach, read here.
 var COACH_TABLES = ["programs", "meal_plans"];
 // One client_settings row per key, so two devices editing different settings don't overwrite each other.
-var SETTING_FIELDS = { goals: "goals", habit_list: "habitList", my_foods: "myFoods", custom_lib: "customLib", baselines: "baselines", custom_program: "custom" };
+var SETTING_FIELDS = { goals: "goals", habit_list: "habitList", my_foods: "myFoods", custom_lib: "customLib", baselines: "baselines", custom_program: "custom", reminder: "reminder" };
 var BODY_KEYS = ["kg", "waist", "chest", "arm", "thigh", "hips", "fat"];
 
 /* ---------- state kept next to the app's data ---------- */
 // uid: the account this device's data belongs to. outbox: key -> {m: edit time, del}. shadow: key -> hash of
 // the version the server has. hold: records the user chose to keep on this phone. cursor: table -> the
 // newest server updated_at pulled. ask: waiting for the user to say what happens to this phone's data.
+// comments: the thread with the coach, id -> comment (comments.js shape); cout: comments written or deleted
+// here and not uploaded yet, id -> {op: "add" | "del"}; readOut: comments seen here whose read receipt
+// hasn't reached the server. push: this browser's notification subscription for the account, if it's on.
 function freshSync() {
   return {
     v: 1, uid: null, email: null, name: null, role: null, ask: false,
     cursor: {}, outbox: {}, shadow: {}, hold: {}, rejected: {},
-    coach: null, programs: {}, plans: {}, seenProgram: null, seenProgramM: null, seenPlan: null, lastSync: null, invite: null
+    coach: null, programs: {}, plans: {}, seenProgram: null, seenProgramM: null, seenPlan: null, lastSync: null, invite: null,
+    comments: {}, cout: {}, readOut: [], push: null
   };
 }
 var sync = (function () {
@@ -45,7 +49,7 @@ var sync = (function () {
 function saveSync() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch (e) { } }
 function persistState() { try { localStorage.setItem("gymlog-v1", JSON.stringify(state)); } catch (e) { } }
 function syncLinked() { return !!sync.uid; }
-function syncPending() { return Object.keys(sync.outbox).length; }
+function syncPending() { return Object.keys(sync.outbox).length + Object.keys(sync.cout).length; }
 
 // What is happening right now (not saved): phase is one of local, saved, syncing, ok, offline, signin, error.
 var syncRt = { phase: "local", busy: null, again: null, lastPull: 0, retry: null, wait: 0, note: null, signingOut: false, hasSession: false, error: null, urlType: null, renderLater: false };
@@ -205,6 +209,7 @@ function normalizeIds(target) {
 function syncScan() {
   if (!sync.uid || sync.ask) return 0;
   syncRt.dirty = false;
+  reminderRefresh();
   var ids = normalizeIds(state), now = isoNow(), seen = {}, n = 0;
   eachLocal(function (key, t, row) {
     seen[key] = 1;
@@ -256,6 +261,10 @@ var syncApi = {
   coachLink: function (uid) { return sb.from("coach_clients").select("coach_id,status").eq("client_id", uid).neq("status", "archived").limit(1); },
   leaveCoach: function (uid, coachId) { return sb.from("coach_clients").update({ status: "archived" }).eq("client_id", uid).eq("coach_id", coachId); },
   rpc: function (name, args) { return sb.rpc(name, args || {}); },
+  addComment: function (row) { return sb.from("comments").insert(row); },
+  removeComment: function (id) { return sb.from("comments").update({ deleted_at: isoNow() }).eq("id", id); },
+  savePush: function (row) { return sb.from("push_subscriptions").upsert(row, { onConflict: "user_id,endpoint" }); },
+  dropPush: function (uid, endpoint) { return sb.from("push_subscriptions").delete().eq("user_id", uid).eq("endpoint", endpoint); },
   photos: function (uid) { return sb.storage.from("progress").list(uid, { limit: 1000 }); },
   removePhotos: function (paths) { return sb.storage.from("progress").remove(paths); }
 };
@@ -312,7 +321,7 @@ async function pushDelete(t, key) {
 }
 
 async function syncPull() {
-  var changed = false, tables = Object.keys(SYNC_TABLES).concat(COACH_TABLES);
+  var changed = false, tables = Object.keys(SYNC_TABLES).concat(COACH_TABLES, ["comments"]);
   for (var i = 0; i < tables.length; i++) if (await pullTable(tables[i])) changed = true;
   if (await pullPeople()) changed = true;
   syncRt.lastPull = Date.now();
@@ -323,11 +332,11 @@ async function pullTable(t) {
   var since = sync.cursor[t] ? new Date(msOf(sync.cursor[t]) - SYNC_OVERLAP_MS).toISOString() : null;
   var max = sync.cursor[t] || null, from = 0, changed = false, coach = COACH_TABLES.indexOf(t) > -1;
   for (; ;) {
-    var res = await syncApi.pull(t, sync.uid, since, from, SYNC_PAGE, coach ? "id" : SYNC_TABLES[t].order);
+    var res = await syncApi.pull(t, sync.uid, since, from, SYNC_PAGE, coach || t === "comments" ? "id" : SYNC_TABLES[t].order);
     if (res.error) { syncCheck(res); var e = new Error(res.error.message || "Could not download"); e.server = true; throw e; }
     var rows = res.data || [];
     rows.forEach(function (r) {
-      if (coach ? mergeCoachRow(t, r) : mergeRow(t, r)) changed = true;
+      if (t === "comments" ? mergeComment(r) : coach ? mergeCoachRow(t, r) : mergeRow(t, r)) changed = true;
       if (r.updated_at && (!max || msOf(r.updated_at) > msOf(max))) max = r.updated_at;
     });
     // the data first, then the cursor: if the app stops in between, the rows are simply pulled again
@@ -358,7 +367,7 @@ function mergeRow(t, r) {
 function validLocal(t, k, v) {
   if (t === "habit_days") return isDay(k) && !!plainObj(v);
   if (t === "client_settings") {
-    if (k === "goals" || k === "baselines") return !!plainObj(v);
+    if (k === "goals" || k === "baselines" || k === "reminder") return !!plainObj(v);
     if (k === "custom_program") return !!plainObj(v) && Array.isArray(v.days) && v.days.length > 0;
     return Array.isArray(v);
   }
@@ -452,6 +461,156 @@ function coachTargets() {
   return out;
 }
 
+/* ---------- comments with the coach (phase 4) ---------- */
+// They are written here first, like everything else, and upload with the next sync. Read receipts too.
+function syncCommentList() {
+  return Object.keys(sync.comments).map(function (k) { return sync.comments[k]; })
+    .sort(function (a, b) { return msOf(a.at) - msOf(b.at) || (a.id < b.id ? -1 : 1); });
+}
+// A comment row from the server. Returns true if the thread on this phone changed.
+function mergeComment(r) {
+  if (!r || !isUuid(r.id)) return false;
+  var had = sync.comments[r.id], op = sync.cout[r.id];
+  if (op && op.op === "del") return false;  // deleted here; that uploads next
+  if (r.deleted_at) { if (!had) return false; delete sync.comments[r.id]; return true; }
+  var c = { id: r.id, author: r.author_id, type: CM_TYPES[r.target_type] ? r.target_type : "general", ref: r.target_ref == null ? null : String(r.target_ref), body: String(r.body || ""), at: r.created_at, read: r.read_at || null };
+  if (had && had.read && !c.read && sync.readOut.indexOf(r.id) > -1) c.read = had.read;  // seen here; the receipt is still on its way
+  if (had && stableStr(had) === stableStr(c)) return false;
+  sync.comments[r.id] = c;
+  if (!had && c.author !== sync.uid && !c.read) (syncRt.fresh = syncRt.fresh || []).push(c);
+  return true;
+}
+async function pushComments() {
+  var ids = Object.keys(sync.cout);
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i], op = sync.cout[id], c = sync.comments[id], res;
+    if (op.op === "add") {
+      if (!c) { delete sync.cout[id]; continue; }
+      res = await syncApi.addComment({ id: id, client_id: sync.uid, author_id: sync.uid, target_type: c.type, target_ref: c.ref, body: c.body });
+      // already there (the answer to an earlier try was lost) counts as sent; a refusal shows as not sent
+      if (res.error && String(res.error.code) !== "23505") { syncCheck(res); c.failed = true; }
+      delete c.pending;
+    } else {
+      res = await syncApi.removeComment(id);
+      if (res.error) syncCheck(res);
+    }
+    if (sync.cout[id] === op) delete sync.cout[id];  // a delete made meanwhile stays queued
+    saveSync();
+  }
+  if (sync.readOut.length) {
+    var seen = sync.readOut.slice(0, 200), r = await syncApi.rpc("mark_comments_read", { p_client: sync.uid, p_ids: seen });
+    if (r.error) syncCheck(r);
+    sync.readOut = sync.readOut.filter(function (x) { return seen.indexOf(x) < 0; });
+    saveSync();
+  }
+}
+function syncSendComment(type, ref, body) {
+  if (!sync.uid || sync.ask) return Promise.reject(new Error("Sign in first"));
+  body = String(body || "").trim().slice(0, 2000);
+  if (!body) return Promise.reject(new Error("Write something first"));
+  var id = rid();
+  sync.comments[id] = { id: id, author: sync.uid, type: CM_TYPES[type] ? type : "general", ref: ref == null ? null : String(ref).slice(0, 64), body: body, at: isoNow(), read: null, pending: true };
+  sync.cout[id] = { op: "add" };
+  saveSync();
+  if (typeof paintAccount === "function") paintAccount();
+  syncNow();
+  return Promise.resolve(sync.comments[id]);
+}
+function syncRemoveComment(id) {
+  var c = sync.comments[id];
+  if (!c || c.author !== sync.uid) return Promise.resolve();
+  delete sync.comments[id];
+  // never uploaded and not uploading now: it simply goes
+  if (sync.cout[id] && sync.cout[id].op === "add" && !syncRt.busy) delete sync.cout[id];
+  else sync.cout[id] = { op: "del" };
+  saveSync();
+  syncNow();
+  return Promise.resolve();
+}
+function syncSeenComments(ids) {
+  var n = 0;
+  (ids || []).forEach(function (id) {
+    var c = sync.comments[id];
+    if (!c || c.author === sync.uid || c.read) return;
+    c.read = isoNow(); n++;
+    if (sync.readOut.indexOf(id) < 0) sync.readOut.push(id);
+  });
+  if (!n) return;
+  saveSync();
+  if (typeof paintAccount === "function") paintAccount();
+  clearTimeout(syncRt.seenT);
+  syncRt.seenT = setTimeout(function () { syncNow(); }, 800);
+}
+// What comments.js draws in the app.
+var appComments = {
+  me: function () { return sync.uid; },
+  them: function () { return sync.coach && sync.coach.name ? "Coach " + sync.coach.name : "Your coach"; },
+  raw: false,
+  all: syncCommentList,
+  send: syncSendComment,
+  remove: syncRemoveComment,
+  seen: syncSeenComments
+};
+if (typeof commentsSource !== "undefined") commentsSource = appComments;
+function syncUnread() { return sync.uid ? syncCommentList().filter(function (c) { return c.author !== sync.uid && !c.read; }).length : 0; }
+
+/* ---------- notifications on this browser (phase 4) ---------- */
+// The browser part is in push.js; here the subscription is saved for the account, in the app's language.
+function pushLang() { return state.lang === "ar" ? "ar" : "en"; }
+async function syncPushOn() {
+  await requireUser();
+  var row = await pushSubscribe();
+  row.user_id = sync.uid; row.lang = pushLang();
+  var r = await syncApi.savePush(row);
+  if (r.error) { syncCheck(r); throw new Error(r.error.message || "Couldn't turn notifications on. Try again."); }
+  sync.push = { endpoint: row.endpoint, lang: row.lang };
+  saveSync();
+}
+async function syncPushOff() {
+  var p = sync.push;
+  sync.push = null; saveSync();
+  if (!p) return;
+  await requireUser();
+  var r = await syncApi.dropPush(sync.uid, p.endpoint);
+  if (r.error) syncCheck(r);
+}
+// After start-up and a change of language: keep the saved subscription the same as this browser's.
+async function syncPushRefresh() {
+  if (!sync.uid || !sync.push) return;
+  var old = sync.push, row = await pushCurrent();
+  if (!row) {
+    // notifications were switched off in the browser, or its subscription ended
+    sync.push = null; saveSync();
+    var gone = await syncApi.dropPush(sync.uid, old.endpoint);
+    if (gone.error) syncCheck(gone);
+    return;
+  }
+  row.user_id = sync.uid; row.lang = pushLang();
+  var r = await syncApi.savePush(row);
+  if (r.error) { syncCheck(r); return; }
+  if (row.endpoint !== old.endpoint) await syncApi.dropPush(sync.uid, old.endpoint);
+  sync.push = { endpoint: row.endpoint, lang: row.lang };
+  saveSync();
+}
+
+/* ---------- training-day reminders (phase 4) ---------- */
+// The setting syncs like any other (client_settings, key "reminder"); the database sends the reminder.
+// Before each upload, the day the app would offer next and this phone's time zone are written into it,
+// so the reminder can say "Next up: Push" and come at the right local time.
+function reminderRefresh() {
+  var r = state.reminder;
+  if (!plainObj(r) || !r.on) return;
+  var next = null;
+  try {
+    var id = nextDay(), d = DAYS.filter(function (x) { return x.id === id; })[0];
+    if (d && d.name) next = String(typeof trText === "function" ? trText(d.name) : d.name).slice(0, 60);
+  } catch (e) { }
+  var tz = null;
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) { }
+  if (next && r.next !== next) r.next = next;
+  if (tz && r.tz !== tz) r.tz = tz;
+}
+
 async function pullPeople() {
   var changed = false, me = await syncApi.profile(sync.uid);
   if (me.error) syncCheck(me);
@@ -487,7 +646,14 @@ function syncApplied() {
   var planSig = plan ? plan.id + "@" + plan.m : null;
   if (plan && sync.seenPlan !== planSig) said.push(sync.seenPlan && sync.seenPlan.split("@")[0] === plan.id ? "Your coach updated your meal plan" : "New meal plan from your coach: " + plan.name);
   sync.seenPlan = planSig;
-  if (said.length) toast(said.join(" · "), 3600);
+  // comments from the coach that arrived just now (not the ones this phone already showed)
+  var fresh = (syncRt.fresh || []).filter(function (c) { return sync.comments[c.id] && !sync.comments[c.id].read; });
+  syncRt.fresh = [];
+  if (fresh.length) said.push(fresh.length === 1 ? "New comment from your coach" : fresh.length + " new comments from your coach");
+  // each part is translated on its own: one rule must not swallow the next part (program names hold " · ")
+  if (said.length) toast(said.map(function (x) { return typeof trText === "function" ? trText(x) : x; }).join(" · "), 4200,
+    fresh.length && typeof openComments === "function" && acctOpen !== "comments" ? { label: "Open", run: function () { openComments(); } } : null);
+  if (typeof commentsChanged === "function") commentsChanged();
   if (syncRt.sortLists) {
     ["sessions", "food", "body"].forEach(function (list) {
       state[list] = state[list].map(function (x, i) { return { x: x, i: i }; })
@@ -551,9 +717,11 @@ function syncNow(opts) {
       syncRt.hasSession = true;
       setPhase("syncing");
       await syncPush();
+      await pushComments();
       if (opts.pull || Date.now() - syncRt.lastPull > SYNC_PULL_EVERY) await syncPull();
       sync.lastSync = isoNow(); syncRt.wait = 0; syncRt.error = null; saveSync();
       setPhase("ok");
+      if (!syncRt.pushChecked) { syncRt.pushChecked = true; syncPushRefresh().catch(function () { syncRt.pushChecked = false; }); }
       return true;
     } catch (e) {
       if (e && e.auth) { syncRt.hasSession = false; setPhase("signin"); }
@@ -717,6 +885,8 @@ async function syncLeaveCoach() {
 async function syncSignOut(wipe) {
   syncRt.signingOut = true;
   clearTimeout(syncRt.retry); clearTimeout(syncRt.note);
+  // notifications for this account stop on this browser (best effort: offline, they stop being shown)
+  if (sync.push) { try { await syncApi.dropPush(sync.uid, sync.push.endpoint); } catch (e) { } }
   try { var c = await sbReady(); await c.auth.signOut({ scope: "local" }); } catch (e) { }
   try { Object.keys(localStorage).forEach(function (k) { if (k.indexOf("gymlog-auth") === 0) localStorage.removeItem(k); }); } catch (e) { }
   sync = freshSync(); saveSync();
@@ -725,7 +895,7 @@ async function syncSignOut(wipe) {
     state = Object.assign(fresh(), keep);
   }
   applyLoaded(); persistState();  // the coach's program goes with the account
-  syncRt.signingOut = false; syncRt.hasSession = false; syncRt.lastPull = 0;
+  syncRt.signingOut = false; syncRt.hasSession = false; syncRt.lastPull = 0; syncRt.pushChecked = false;
   setPhase("local");
   if (typeof paintAccount === "function") paintAccount();
 }

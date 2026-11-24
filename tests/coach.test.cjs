@@ -39,7 +39,8 @@ function fixture() {
     client_settings: [{ client_id: SARA, key: 'goals', value: { kg: 70, protein: 170, kcal: 1900 } }, { client_id: MONA, key: 'goals', value: { kg: 60 } }],
     meal_plans: [{ id: 'plan-omar', coach_id: COACH.id, client_id: OMAR, name: 'Lean bulk', active: true, targets: { kcal: 2800, protein: 170 }, meals: [{ name: 'Breakfast', items: ['4 eggs', 'Oats'], kcal: 700, p: 45 }], modified_at: ago(3) }],
     programs: [],
-    notes: {}, invites: [{ code: 'OLDCODE23456', expires_at: ago(-3), created_at: ago(4) }]
+    notes: {}, invites: [{ code: 'OLDCODE23456', expires_at: ago(-3), created_at: ago(4) }],
+    comments: []
   };
 }
 
@@ -65,7 +66,21 @@ function fakeApi(db, opts = {}) {
     setStatus: async (me, id, status) => { calls.push(['setStatus', id, status]); db.links.find(l => l.client_id === id).status = status; },
     invites: async () => db.invites.map(plain),
     createInvite: async days => { calls.push(['createInvite', days]); const code = 'NEWCODE23456'; db.invites.unshift({ code, expires_at: ago(-days), created_at: ago(0) }); return code; },
-    withdrawInvite: async code => { calls.push(['withdraw', code]); db.invites = db.invites.filter(i => i.code !== code); }
+    withdrawInvite: async code => { calls.push(['withdraw', code]); db.invites = db.invites.filter(i => i.code !== code); },
+    // comments, like public.comment_inbox() and mark_comments_read() in 0003_comments_push.sql
+    inbox: async () => db.links.filter(l => l.status !== 'archived').map(l => {
+      const live = db.comments.filter(c => c.client_id === l.client_id && !c.deleted_at).sort((a, b) => a.created_at < b.created_at ? -1 : 1), last = live[live.length - 1];
+      return { client_id: l.client_id, unread: live.filter(c => c.author_id === l.client_id && !c.read_at).length, waiting: !!last && last.author_id === l.client_id, last_at: last ? last.created_at : null };
+    }),
+    comments: async id => db.comments.filter(c => c.client_id === id && !c.deleted_at).sort((a, b) => a.created_at < b.created_at ? -1 : 1).map(plain),
+    addComment: async row => { calls.push(['addComment', row.client_id, row.target_type, row.target_ref, row.body]); db.comments.push(Object.assign({ created_at: new Date().toISOString(), read_at: null, deleted_at: null }, plain(row))); },
+    removeComment: async id => { calls.push(['removeComment', id]); db.comments.find(c => c.id === id).deleted_at = new Date().toISOString(); },
+    markRead: async (client, ids) => {
+      calls.push(['markRead', client, plain(ids).sort()]);
+      db.comments.forEach(c => { if (c.client_id === client && ids.includes(c.id) && c.author_id !== COACH.id && !c.read_at) c.read_at = new Date().toISOString(); });
+    },
+    savePush: async row => { calls.push(['savePush', row.user_id, row.endpoint, row.lang]); },
+    dropPush: async (me, endpoint) => { calls.push(['dropPush', me, endpoint]); }
   };
   return api;
 }

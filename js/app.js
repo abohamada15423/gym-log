@@ -46,6 +46,22 @@ fx.enter = true;
 render();
 syncStart();
 
+// A tapped notification opens the app where it points: the comments, the Meals tab, or Train.
+function openFromLink(url) {
+  var hash = "";
+  try { hash = new URL(url, location.href).hash; } catch (e) { hash = String(url || ""); }
+  if (hash === "#comments") { if (sync.uid && typeof openComments === "function") openComments(); return; }
+  var t = hash === "#meals" ? "meals" : "train";
+  if (tab !== t) { tab = t; window.scrollTo(0, 0); fx.enter = true; render(); }
+}
+if (location.hash === "#comments" || location.hash === "#meals") {
+  var startLink = location.hash;
+  history.replaceState(null, "", location.pathname + location.search);
+  openFromLink(startLink);
+}
+// a notification arrived while the app is open: fetch what it's about now rather than in five minutes
+pushListen(openFromLink, function () { if (sync.uid) syncNow({ pull: true }); });
+
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
   window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () { }); });
 }

@@ -171,13 +171,19 @@ function openHistoryModal(openId) {
     });
     var del = h("button", { class: "btn ghost sm", type: "button", text: "Remove workout" });
     del.onclick = function () { closeModal(); removeWithUndo("sessions", s, sessionName(s) + " · " + s.date); };
+    // what the client and their coach said about this workout (opened: it counts as seen)
+    var cms = typeof cmHere === "function" && cmHere("session", s.id)
+      ? commentBlock("session", s.id, { later: true, cta: "Ask your coach about this workout", placeholder: "Ask your coach about this workout…" }) : null;
+    var said = cms ? cmOn("session", s.id) : [], fresh = said.length ? cmUnread(said).length : 0;
+    if (cms) body.appendChild(cms);
     body.appendChild(del);
-    var det = h("details", { class: "hist" }, [
-      h("summary", {}, [h("div", {}, [h("b", { text: sessionName(s) }), h("small", { text: (d ? mbDay(s.date) : s.date) + " · " + names.length + " exercises · " + nSets + " sets" })]),
+    var det = h("details", { class: "hist" + (fresh ? " has-new" : "") }, [
+      h("summary", {}, [h("div", {}, [h("b", { text: sessionName(s) }), h("small", { text: (d ? mbDay(s.date) : s.date) + " · " + names.length + " exercises · " + nSets + " sets" + (said.length ? " · " + (said.length === 1 ? "1 comment" : said.length + " comments") : "") })]),
         h("span", { class: "v", text: Math.round(sessionVolume(s)).toLocaleString() + " kg" })]),
       body
     ]);
-    if (s.id === openId) { det.open = true; target = det; }
+    if (cms) det.addEventListener("toggle", function () { if (det.open) { cms.seen(); det.classList.remove("has-new"); } });
+    if (s.id === openId) { det.open = true; target = det; if (cms) cms.seen(); }
     box.appendChild(det);
   });
   $("modal").hidden = false;

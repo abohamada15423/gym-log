@@ -7,10 +7,13 @@ create role authenticated nologin noinherit;
 create role service_role nologin noinherit bypassrls;
 create role supabase_auth_admin nologin noinherit;
 
--- Like Supabase: whatever postgres creates in public is granted to the API roles by default,
--- so a table or function the migration forgets to lock down shows up in the tests.
+-- Stricter than Supabase: whatever postgres creates in public is granted to anon and authenticated,
+-- so a table or function the migration forgets to lock down shows up in the tests. service_role gets
+-- what a Supabase project gives it today on new tables (no reading or writing), so a grant the push
+-- function needs and the migration forgot shows up too.
 grant usage on schema public to anon, authenticated, service_role;
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated;
+alter default privileges in schema public grant truncate, references, trigger on tables to service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 
@@ -56,3 +59,23 @@ create table storage.objects (
 alter table storage.objects enable row level security;
 grant select, insert, update, delete on storage.objects to authenticated;
 grant select on storage.buckets to authenticated;
+
+-- pg_net, Vault and pg_cron: stand-ins that record what would happen, so the tests can read it.
+create schema net;
+create table net.calls (id bigserial primary key, url text, body jsonb, headers jsonb, at timestamptz not null default now());
+create function net.http_post(url text, body jsonb default '{}'::jsonb, params jsonb default '{}'::jsonb,
+                              headers jsonb default '{}'::jsonb, timeout_milliseconds integer default 5000) returns bigint
+language sql as $$ insert into net.calls (url, body, headers) values (url, body, headers) returning id $$;
+
+create schema vault;
+create table vault.secrets (name text primary key, secret text not null);
+create view vault.decrypted_secrets as select name, secret as decrypted_secret from vault.secrets;
+
+create schema cron;
+create table cron.job (jobname text primary key, schedule text not null, command text not null);
+create function cron.schedule(job_name text, schedule text, command text) returns bigint
+language sql as $$
+  insert into cron.job (jobname, schedule, command) values (job_name, schedule, command)
+  on conflict (jobname) do update set schedule = excluded.schedule, command = excluded.command;
+  select 1::bigint
+$$;

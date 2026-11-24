@@ -88,6 +88,7 @@ function renderPlan(root) {
   root.appendChild(h("h2", { text: "Language" }));
   root.appendChild(langRow);
 
+  if (typeof renderNotifications === "function") renderNotifications(root);
   root.appendChild(h("h2", { text: "Alerts and screen" }));
   function toggleRow(title, sub, on) {
     var sw = h("span", { class: "sw" + (on ? " on" : "") });
