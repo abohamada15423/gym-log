@@ -198,7 +198,7 @@ function renderBody(root) {
   });
   var add = h("button", { class: "btn", text: "Save check-in" });
   add.onclick = function () {
-    var entry = { date: f.date.value || today(), note: "" }, any = false, bad = null;
+    var entry = { id: rid(), date: f.date.value || today(), note: "" }, any = false, bad = null;
     BODY_METRICS.forEach(function (m) {
       var v = num(f[m.k].value);
       if (v !== null && (v <= 0 || (m.k === "fat" && v >= 70))) bad = bad || m.label;

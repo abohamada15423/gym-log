@@ -122,7 +122,74 @@ var AR_WORDS = {
   "none": "لا شيء", "low": "قليل", "almost": "قريب", "optimal": "مثالي", "high": "مرتفع",
   // quick foods
   "Cottage Cheese + Sauce (200g)": "جبن قريش + صوص (200 جم)", "Chicken Breast Wrap": "راب صدور فراخ", "3 Boiled/Scrambled Eggs": "3 بيضات مسلوقة/أومليت",
-  "Plain Greek/Baladi Yogurt": "زبادي يوناني/بلدي سادة", "Tuna Can (Drained)": "علبة تونة (مصفّاة)", "Whey / Protein Shake": "واي / شيك بروتين"
+  "Plain Greek/Baladi Yogurt": "زبادي يوناني/بلدي سادة", "Tuna Can (Drained)": "علبة تونة (مصفّاة)", "Whey / Protein Shake": "واي / شيك بروتين",
+  // account and sync (js/account.js, js/sync.js)
+  "Account": "الحساب", "Account and sync": "الحساب والمزامنة", "Sign in": "تسجيل الدخول", "Create account": "إنشاء حساب",
+  "Sign in or create account": "تسجيل الدخول أو إنشاء حساب", "Your account": "حسابك", "Account settings": "إعدادات الحساب",
+  "Email": "البريد الإلكتروني", "Password": "كلمة المرور", "Name": "الاسم", "New password": "كلمة المرور الجديدة",
+  "At least 8 characters": "8 أحرف على الأقل", "Forgot password?": "نسيت كلمة المرور؟", "Cancel": "إلغاء", "Choose": "اختر",
+  "Saved on this phone ✓": "محفوظ على هذا الهاتف ✓", "Syncing…": "جارٍ المزامنة…", "Saved online ✓": "محفوظ أونلاين ✓",
+  "Offline": "غير متصل", "Offline · will upload later": "غير متصل · سيُرفع عند عودة الإنترنت", "Sign in to sync": "سجّل الدخول للمزامنة",
+  "Sync problem": "مشكلة في المزامنة", "Choose where this phone's data goes": "اختر مكان بيانات هذا الهاتف", "Not synced yet": "لم تتم المزامنة بعد",
+  "Save your log online": "احفظ سجلك أونلاين",
+  "Use it on more than one phone, and let your coach follow your training and meals.": "استخدمه على أكثر من هاتف، ودع الكابتن يتابع تمارينك ووجباتك.",
+  "Signed in": "مسجّل الدخول", "Coach account": "حساب كابتن", "Your coach": "الكابتن", "Coach": "الكابتن",
+  "Sign in to save your log online and share it with your coach.": "سجّل الدخول لتحفظ سجلك أونلاين وتشاركه مع الكابتن.",
+  "Your coach invited you. Sign in or create an account to join.": "دعاك الكابتن. سجّل الدخول أو أنشئ حسابًا للانضمام.",
+  "I agree to the": "أوافق على", "privacy policy": "سياسة الخصوصية", "Privacy policy": "سياسة الخصوصية",
+  ", and to my coach seeing my workouts, meals and body measurements once I join them.": "، وعلى أن يرى الكابتن تماريني ووجباتي وقياسات جسمي بعد انضمامي إليه.",
+  "Enter a valid email": "أدخل بريدًا إلكترونيًا صحيحًا", "Enter your password": "أدخل كلمة المرور", "Enter your name": "أدخل اسمك",
+  "Password must be at least 8 characters": "يجب ألا تقل كلمة المرور عن 8 أحرف", "Tick the box to agree first": "علّم على مربع الموافقة أولًا",
+  "Signed in ✓": "تم تسجيل الدخول ✓", "Account created ✓": "تم إنشاء الحساب ✓", "Signed out": "تم تسجيل الخروج",
+  "Wrong email or password": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+  "Confirm your email first. Check your inbox for the link.": "أكّد بريدك الإلكتروني أولًا. ستجد الرابط في بريدك.",
+  "This email already has an account. Sign in instead.": "هذا البريد له حساب بالفعل. سجّل الدخول بدلًا من ذلك.",
+  "Too many emails were sent. Try again in an hour.": "أُرسل عدد كبير من الرسائل. حاول مرة أخرى بعد ساعة.",
+  "Too many tries. Wait a few minutes and try again.": "محاولات كثيرة. انتظر بضع دقائق ثم حاول مرة أخرى.",
+  "That password is too easy to guess. Choose another.": "كلمة المرور هذه سهلة التخمين. اختر غيرها.",
+  "Choose a password you haven't used here before": "اختر كلمة مرور لم تستخدمها هنا من قبل",
+  "New accounts are switched off for now": "إنشاء الحسابات متوقف حاليًا",
+  "No connection. Check your internet and try again.": "لا يوجد اتصال. تحقق من الإنترنت وحاول مرة أخرى.",
+  "Something went wrong. Try again.": "حدث خطأ. حاول مرة أخرى.", "Sign in again first": "سجّل الدخول مرة أخرى أولًا", "Sign in first": "سجّل الدخول أولًا",
+  "Check your email": "تحقق من بريدك", "Reset your password": "إعادة تعيين كلمة المرور", "Choose a new password": "اختر كلمة مرور جديدة",
+  "Open it to confirm your email. It can open in any browser. Then come back here and sign in with your email and password.": "افتحه لتأكيد بريدك، ويمكن فتحه في أي متصفح. بعدها ارجع إلى هنا وسجّل الدخول ببريدك وكلمة المرور.",
+  "Send it again": "أرسله مرة أخرى", "Sent ✓ Check your inbox": "تم الإرسال ✓ تحقق من بريدك", "Back to sign in": "العودة لتسجيل الدخول",
+  "We'll email you a link to choose a new password.": "سنرسل إلى بريدك رابطًا لاختيار كلمة مرور جديدة.", "Send reset link": "إرسال رابط إعادة التعيين",
+  "If it opens in another browser, choose the new password there, then sign in here with it.": "إذا فُتح الرابط في متصفح آخر، فاختر كلمة المرور الجديدة هناك، ثم سجّل الدخول بها هنا.",
+  "Choose a new password for your account.": "اختر كلمة مرور جديدة لحسابك.", "Save new password": "حفظ كلمة المرور الجديدة", "Password changed ✓": "تم تغيير كلمة المرور ✓",
+  "Email confirmed ✓ You're signed in": "تم تأكيد بريدك ✓ أنت مسجّل الدخول الآن",
+  "This link has expired. Sign in, or ask for a new link.": "انتهت صلاحية هذا الرابط. سجّل الدخول أو اطلب رابطًا جديدًا.",
+  "That link didn't work. Try signing in.": "هذا الرابط لم يعمل. جرّب تسجيل الدخول.",
+  "Add this phone's data?": "إضافة بيانات هذا الهاتف؟", "This phone already has:": "على هذا الهاتف بالفعل:",
+  "1 workout": "تمرين واحد", "1 food": "أكلة واحدة", "1 check-in": "قياس واحد", "1 day of habits": "يوم عادات واحد",
+  "Add it to your account to keep it safe online and see it on your other phones. Your coach sees what's in your account.": "أضفها إلى حسابك لتبقى محفوظة أونلاين وتراها على هواتفك الأخرى. الكابتن يرى ما في حسابك.",
+  "Add to my account": "أضفها إلى حسابي", "Keep it on this phone only": "أبقها على هذا الهاتف فقط", "Uploading your data…": "جارٍ رفع بياناتك…",
+  "Sync now": "مزامنة الآن", "Up to date ✓": "كل شيء محدّث ✓", "Sign in again": "سجّل الدخول مرة أخرى",
+  "Add this phone's data to my account": "أضف بيانات هذا الهاتف إلى حسابي",
+  "Some items were refused by the server. Edit them and they'll be sent again.": "رفض الخادم بعض العناصر. عدّلها وستُرسل مرة أخرى.",
+  "Your coach sees your workouts, meals, check-ins and habits.": "يرى الكابتن تمارينك ووجباتك وقياساتك وعاداتك.",
+  "Leave coach": "ترك الكابتن", "Leave your coach? They won't see your new workouts, meals or check-ins.": "ترك الكابتن؟ لن يرى تمارينك ووجباتك وقياساتك الجديدة.",
+  "You left your coach": "تركت الكابتن",
+  "This is a coach account. Your coaching dashboard comes in a later update.": "هذا حساب كابتن. لوحة المتابعة تأتي في تحديث قادم.",
+  "Enter the code your coach gave you.": "أدخل الكود الذي أعطاك إياه الكابتن.", "Invite code": "كود الدعوة", "Join": "انضمام",
+  "Join your coach": "انضم إلى الكابتن", "The code has 12 letters and numbers": "الكود 12 حرفًا ورقمًا", "You joined your coach ✓": "انضممت إلى الكابتن ✓",
+  "Your coach invited you. Join to share your training and meals with them.": "دعاك الكابتن. انضم لتشاركه تمارينك ووجباتك.",
+  "This code is wrong or has expired": "الكود غير صحيح أو انتهت صلاحيته",
+  "You already have a coach. Leave them before joining another.": "لديك كابتن بالفعل. اتركه قبل الانضمام إلى كابتن آخر.",
+  "Coaches cannot join as clients": "لا يمكن للكابتن الانضمام كمتدرب", "Not allowed": "غير مسموح",
+  "Your data": "بياناتك", "Export my data": "تصدير بياناتي", "Sign out": "تسجيل الخروج", "Sign out?": "تسجيل الخروج؟", "Delete account": "حذف الحساب",
+  "Your data stays in your account. Sign in again any time to get it back.": "تبقى بياناتك في حسابك. سجّل الدخول في أي وقت لتستعيدها.",
+  "1 change isn't uploaded yet": "تعديل واحد لم يُرفع بعد",
+  "Connect to the internet first, or keep the data on this phone.": "اتصل بالإنترنت أولًا، أو أبقِ البيانات على هذا الهاتف.",
+  "Also remove my data from this phone": "احذف بياناتي من هذا الهاتف أيضًا",
+  "Delete your account?": "حذف حسابك؟",
+  "This permanently deletes your account and everything in it: workouts, meals, check-ins, habits and photos. Your coach won't see them any more.": "سيُحذف حسابك نهائيًا مع كل ما فيه: التمارين والوجبات والقياسات والعادات والصور، ولن يراها الكابتن بعد ذلك.",
+  "It can't be undone. Export your data first if you want a copy.": "لا يمكن التراجع عن ذلك. صدّر بياناتك أولًا إن أردت نسخة منها.",
+  "I understand this can't be undone": "أفهم أنه لا يمكن التراجع عن ذلك", "Delete my account": "احذف حسابي", "Account deleted": "تم حذف الحساب",
+  "You need to be online to delete your account": "يجب أن تكون متصلًا بالإنترنت لحذف حسابك",
+  "1 change waiting to upload": "تعديل واحد في انتظار الرفع", "1 item couldn't upload": "عنصر واحد لم يُرفع", "1 item kept on this phone only": "عنصر واحد على هذا الهاتف فقط",
+  "Set by your coach": "حدّده الكابتن", "From your coach": "من الكابتن", "Coach's program": "برنامج الكابتن", "Meal plan": "نظام الأكل",
+  "Your data is also saved in your account.": "بياناتك محفوظة أيضًا في حسابك.", "Backup added to your account": "تمت إضافة النسخة إلى حسابك"
 };
 
 var AR_DOW = { Sat: "السبت", Sun: "الأحد", Mon: "الاثنين", Tue: "الثلاثاء", Wed: "الأربعاء", Thu: "الخميس", Fri: "الجمعة" };
@@ -268,6 +335,29 @@ var AR_RULES = [
   [/^\+ (.+) \((\d+(?:\.\d+)?)g P\)$/, function (m) { return "+ " + trWord(m[1]) + " (" + m[2] + " جم بروتين)"; }],
   [/^Rest over — GO! 💪$/, function () { return "انتهت الراحة — انطلق! 💪"; }],
   [/^Next set: (.+)$/, function (m) { return "المجموعة التالية: " + m[1]; }],
+  // account and sync
+  [/^From Coach (.+)$/, function (m) { return "من الكابتن " + m[1]; }],
+  [/^You're now training with Coach (.+)$/, function (m) { return "أنت الآن تتمرن مع الكابتن " + m[1]; }],
+  [/^New program from your coach: (.+)$/, function (m) { return "برنامج جديد من الكابتن: " + m[1]; }],
+  [/^We sent a link to (.+)\.$/, function (m) { return "أرسلنا رابطًا إلى " + m[1] + "."; }],
+  [/^We sent a reset link to (.+)\.$/, function (m) { return "أرسلنا رابط إعادة التعيين إلى " + m[1] + "."; }],
+  [/^(\d+) workouts$/, function (m) { return "التمارين: " + m[1]; }],
+  [/^(\d+) foods$/, function (m) { return "الأكلات: " + m[1]; }],
+  [/^(\d+) check-ins$/, function (m) { return "القياسات: " + m[1]; }],
+  [/^(\d+) days of habits$/, function (m) { return "أيام العادات: " + m[1]; }],
+  [/^(\d+) changes waiting to upload$/, function (m) { return "تعديلات في انتظار الرفع: " + m[1]; }],
+  [/^(\d+) items couldn't upload$/, function (m) { return "عناصر لم تُرفع: " + m[1]; }],
+  [/^(\d+) items kept on this phone only$/, function (m) { return "عناصر على هذا الهاتف فقط: " + m[1]; }],
+  [/^(\d+) changes aren't uploaded yet$/, function (m) { return "تعديلات لم تُرفع بعد: " + m[1]; }],
+  [/^Last synced just now$/, function () { return "آخر مزامنة: الآن"; }],
+  [/^Last synced (\d+) min ago$/, function (m) { return "آخر مزامنة منذ " + m[1] + " دقيقة"; }],
+  [/^Last synced (\d+) h ago$/, function (m) { return "آخر مزامنة منذ " + m[1] + " ساعة"; }],
+  [/^Last synced on (\d{4}-\d\d-\d\d)$/, function (m) { return "آخر مزامنة: " + arIso(m[1]); }],
+  [/^Add this backup to your account\?/, function (m, s) {
+    var n = s.match(/Backup: (\d+) workouts?, (\d+) check-ins?/);
+    return "إضافة هذه النسخة إلى حسابك؟\n\nالنسخة: " + (n ? n[1] + " تمارين، " + n[2] + " قياسات" : "") + ".\n\nما في حسابك يبقى كما هو، وإذا كان العنصر نفسه في النسخة تُستخدم نسخته.";
+  }],
+  [/^Coach (.+)$/, function (m) { return "الكابتن " + m[1]; }],
   // general patterns last, so specific rules above win
   [/^(.+), set (\d+)$/, function (m) { return m[1] + "، المجموعة " + m[2]; }]
 ];
@@ -313,6 +403,7 @@ function trNode(n) {
   }
   if (n.nodeType !== 1) return;
   if (n.classList && n.classList.contains("lang-switch")) return;
+  if (n.getAttribute("translate") === "no") return;  // people's names, emails, codes
   if (n.nodeName === "INPUT" && (n.type === "button" || n.type === "submit") && n.value) n.value = T(n.value);
   I18N_ATTRS.forEach(function (a) {
     var v = n.getAttribute(a); if (!v) return;

@@ -176,7 +176,7 @@ test('importing a backup asks first, then restores and normalises it', async t =
 });
 
 test('goals are editable on the Plan tab and drive the Meals and Body tabs', t => {
-  const a = app(t);
+  const a = app(t, { sessions: [], body: [{ date: '2026-10-05', kg: 90.6 }] });
   a.doc.getElementById('t-plan').click();
   const field = label => a.doc.querySelector(`input[aria-label^="${label}"]`);
   const set = (label, v) => { const i = field(label); i.value = v; i.dispatchEvent(new a.w.Event('change')); };
@@ -379,6 +379,17 @@ test('habits keep old data, can be added and removed on the Plan tab, and count 
   assert.match(a.doc.querySelector('[aria-label^="Sleep:"]').textContent, /8 \/ 8h.*✅/);
 });
 
+test('a new device starts with no check-ins, and new records get uuid ids', t => {
+  const a = app(t);
+  assert.deepEqual(a.state() ? a.state().body : [], []);
+  a.doc.getElementById('t-body').click();
+  const lbl = text => [...a.doc.querySelectorAll('label')].find(l => l.textContent.startsWith(text)).querySelector('input');
+  lbl('Weight').value = '80';
+  a.click('Save check-in');
+  assert.equal(a.state().body.length, 1);
+  assert.match(a.state().body[0].id, /^[0-9a-f-]{36}$/);
+});
+
 test('check-ins take extra measurements and each one gets its own trend chart', t => {
   const a = app(t, { sessions: [], body: [{ date: '2026-10-01', kg: 90, arm: 38 }] });
   a.doc.getElementById('t-body').click();
@@ -388,7 +399,10 @@ test('check-ins take extra measurements and each one gets its own trend chart', 
   lbl('Arms').value = '38.5';
   lbl('Body fat').value = '22';
   a.click('Save check-in');
-  assert.deepEqual(a.state().body.at(-1), { date: '2026-10-15', note: '', kg: 89, waist: null, chest: null, arm: 38.5, thigh: null, hips: null, fat: 22 });
+  const saved = a.state().body.at(-1);
+  assert.match(saved.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  delete saved.id;
+  assert.deepEqual(saved, { date: '2026-10-15', note: '', kg: 89, waist: null, chest: null, arm: 38.5, thigh: null, hips: null, fat: 22 });
   const chips = [...a.doc.querySelectorAll('.mchips button')].map(b => b.textContent);
   assert.deepEqual(chips, ['Weight', 'Arms', 'Body fat']);
   a.click('Arms');

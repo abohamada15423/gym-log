@@ -399,7 +399,7 @@ function renderTrain(root) {
   var saveBtn = h("button", { class: "btn dock-finish", text: "Finish", type: "button" });
   saveBtn.disabled = doneSets === 0;
   saveBtn.onclick = function () {
-    var sess = { id: uid(), date: dateIn.value || today(), day: d.id, dayName: d.name, prog: state.programId, sets: {} }, any = false;
+    var sess = { id: rid(), date: dateIn.value || today(), day: d.id, dayName: d.name, prog: state.programId, sets: {} }, any = false;
     d.ex.forEach(function (e) {
       var name = e[0], arr = draft[name] || [];
       arr.slice(0, setsFor(d, e)).forEach(function (s) {

@@ -1,10 +1,12 @@
 // App state, DOM helper h(), dates, numbers, toast and undo.
 // Classic script sharing the page's global scope; see README for load order.
 
-function goals() { return Object.assign({}, GOAL_DEFAULTS, state.goals || {}); }
+// Daily targets: your own goals, with calories and protein from your coach's meal plan when there is one.
+function goals() { return Object.assign({}, GOAL_DEFAULTS, state.goals || {}, typeof coachTargets === "function" ? coachTargets() : {}); }
 
+// A new device starts empty: no check-in, so nobody's first weigh-in is someone else's.
 function fresh() {
-  return { v: 2, sessions: [], body: [Object.assign({}, BASE)], food: [], drafts: {}, baselines: {}, habits: {}, theme: null, programId: "split4", custom: null, customLib: [], myFoods: [], setAdj: {}, draftNotes: {}, notify: false, keepAwake: true, goals: {} };
+  return { v: 2, sessions: [], body: [], food: [], drafts: {}, baselines: {}, habits: {}, theme: null, programId: "split4", custom: null, customLib: [], myFoods: [], setAdj: {}, draftNotes: {}, notify: false, keepAwake: true, goals: {} };
 }
 
 var state = fresh(), tab = "train", dayId = "push", foodDate = today();
@@ -31,6 +33,16 @@ function today() { var d = new Date(); return fmt(d); }
 function fmt(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
 function num(v) { var n = parseFloat(String(v).replace(",", ".")); return isFinite(n) ? n : null; }
 function uid() { return String(Date.now()) + Math.random().toString(36).slice(2, 6); }
+// Id for a workout, food or check-in: a uuid, so it is the same row on the server and every device.
+function rid() {
+  var c = window.crypto;
+  if (c && c.randomUUID) return c.randomUUID();
+  var b = new Uint8Array(16);
+  if (c && c.getRandomValues) c.getRandomValues(b); else for (var i = 0; i < 16; i++) b[i] = Math.random() * 256 | 0;
+  b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+  var x = Array.prototype.map.call(b, function (n) { return (n + 256).toString(16).slice(1); }).join("");
+  return x.slice(0, 8) + "-" + x.slice(8, 12) + "-" + x.slice(12, 16) + "-" + x.slice(16, 20) + "-" + x.slice(20);
+}
 function toast(t, ms, action) {
   var e = $("toast"); e.hidden = false; e.textContent = t;
   if (action) {

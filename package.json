@@ -3,9 +3,11 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.cjs",
-    "test:db": "node --test supabase/tests/*.test.cjs"
+    "test:db": "node --test supabase/tests/*.test.cjs",
+    "vendor": "node scripts/vendor.cjs"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "2.118.0",
     "jsdom": "26.1.0",
     "pg": "8.23.1"
   }
