@@ -19,12 +19,18 @@ const stable = v => v === null || typeof v !== 'object' ? JSON.stringify(v ?? nu
 
 function fakeServer() {
   let clock = Date.now();
-  const names = ['workout_sessions', 'food_logs', 'body_checkins', 'habit_days', 'client_settings', 'programs', 'meal_plans'];
+  const names = ['workout_sessions', 'food_logs', 'body_checkins', 'habit_days', 'client_settings', 'programs', 'meal_plans', 'comments'];
   const tables = Object.fromEntries(names.map(n => [n, new Map()]));
   const pk = (t, r) => t === 'habit_days' ? r.client_id + '|' + r.date : t === 'client_settings' ? r.client_id + '|' + r.key : r.id;
   const s = {
     tables, offline: false, session: ME, profiles: new Map([[ME.id, { id: ME.id, full_name: 'Sara Ali', role: 'client' }]]),
-    links: [], refuse: () => false, requests: 0,
+    links: [], refuse: () => false, requests: 0, pushes: new Map(),
+    // the coach writes in the thread (on the coach page)
+    coachSays(body, type = 'general', ref = null, id = require('node:crypto').randomUUID()) {
+      const now = s.now();
+      tables.comments.set(id, { id, client_id: ME.id, author_id: COACH, target_type: type, target_ref: ref, body, read_at: null, deleted_at: null, created_at: now, updated_at: now });
+      return id;
+    },
     now() { clock = Math.max(clock + 3, Date.now()); return iso(clock); },
     rows(t) { return [...tables[t].values()]; },
     // a write, with the trigger's rules
@@ -74,10 +80,33 @@ function fakeServer() {
         return { data: COACH, error: null, status: 200 };
       }
       if (name === 'delete_my_account') { names.forEach(n => s.rows(n).forEach(r => { if (r.client_id === s.session.id) tables[n].delete(pk(n, r)); })); return { data: null, error: null, status: 204 }; }
+      if (name === 'mark_comments_read') {
+        if (s.offline) return down();
+        s.requests++;
+        s.rows('comments').forEach(r => { if (r.client_id === args.p_client && r.author_id !== s.session.id && !r.read_at && (!args.p_ids || args.p_ids.includes(r.id))) { const now = s.now(); tables.comments.set(r.id, { ...r, read_at: now, updated_at: now }); } });
+        return { data: 1, error: null, status: 200 };
+      }
       return { data: null, error: { code: 'PGRST202', message: 'no such function' }, status: 404 };
     },
     photos: async () => ({ data: [], error: null }),
-    removePhotos: async () => ({ data: [], error: null })
+    removePhotos: async () => ({ data: [], error: null }),
+    addComment: async row => {
+      s.requests++;
+      if (s.offline) return down();
+      if (tables.comments.has(row.id)) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' }, status: 409 };
+      const now = s.now();
+      tables.comments.set(row.id, { ...json(row), read_at: null, deleted_at: null, created_at: now, updated_at: now });
+      return { data: null, error: null, status: 201 };
+    },
+    removeComment: async id => {
+      s.requests++;
+      if (s.offline) return down();
+      const r = tables.comments.get(id);
+      if (r) { const now = s.now(); tables.comments.set(id, { ...r, deleted_at: now, updated_at: now }); }
+      return { data: null, error: null, status: 204 };
+    },
+    savePush: async row => { if (s.offline) return down(); s.pushes.set(row.user_id + '|' + row.endpoint, json(row)); return { data: null, error: null, status: 201 }; },
+    dropPush: async (uid, endpoint) => { if (s.offline) return down(); s.pushes.delete(uid + '|' + endpoint); return { data: null, error: null, status: 204 }; }
   };
   return s;
 }
@@ -466,4 +495,163 @@ test('the bundled Supabase library is the version package.json pins', () => {
   const pin = require('../package.json').devDependencies['@supabase/supabase-js'];
   const head = fs.readFileSync('js/vendor/supabase.js', 'utf8').slice(0, 200);
   assert.match(head, new RegExp('supabase-js ' + pin.replace(/\./g, '\\.') + ' '));
+});
+
+// ---- phase 4: comments with the coach, notifications and reminders ----------------------------
+async function coached(t, saved) {
+  const server = fakeServer(), a = app(t, server, { saved: saved || { sessions: [] } });
+  server.links.push({ coach_id: COACH, client_id: ME.id, status: 'active' });
+  server.profiles.set(COACH, { id: COACH, full_name: 'Ahmed Hassan', role: 'coach' });
+  await a.signIn();
+  // a phone with data asks first: add it to the account
+  if (a.w.sync.ask) { a.w.closeModal(); a.w.syncAdopt(true); await a.settle(); }
+  return { server, a };
+}
+const WORKOUT = { id: '77777777-7777-4777-8777-777777777777', date: '2026-11-23', day: 'push', dayName: 'Push', prog: 'split4', sets: { 'Bench press': [[60, 8]] } };
+
+test("the coach's comments arrive with a dot and a message; reading them sends a receipt; a reply stays about the same workout", async t => {
+  const { server, a } = await coached(t, { sessions: [WORKOUT] });
+  const onWorkout = server.coachSays('Great bench. Add 2.5 kg next week.', 'session', WORKOUT.id);
+  server.coachSays('How did the week go?');
+  await a.w.syncNow({ pull: true }); await a.settle();
+  const name = a.doc.getElementById('coach-name');
+  assert.ok(name.classList.contains('unread'), 'a lime dot on the coach name');
+  assert.equal(name.getAttribute('aria-label'), 'Comments · 2 new');
+  assert.match(a.doc.getElementById('toast').textContent, /^2 new comments from your coach/);
+  assert.ok(a.doc.querySelector('#toast .toast-act'), 'with a way to open them');
+
+  name.click();
+  const thread = a.doc.querySelector('#mbox .cm-thread');
+  assert.match(thread.textContent, /Coach Ahmed Hassan.*Push · Mon 23 Nov.*Great bench.*How did the week go\?/);
+  await new Promise(r => a.w.setTimeout(r, 900)); await a.settle();
+  assert.ok(server.rows('comments').every(c => c.read_at), 'the receipt reached the server');
+  assert.ok(!name.classList.contains('unread'), 'and the dot is gone');
+
+  [...thread.querySelectorAll('.cm.theirs')].find(n => /Great bench/.test(n.textContent)).querySelector('button').click();
+  assert.match(thread.querySelector('.cm-to').textContent, /About Push · Mon 23 Nov/);
+  thread.querySelector('textarea').value = 'Thanks, will do!';
+  thread.querySelector('form').dispatchEvent(new a.w.Event('submit', { cancelable: true }));
+  await a.settle();
+  const mine = server.rows('comments').find(c => c.author_id === ME.id);
+  assert.deepEqual([mine.body, mine.target_type, mine.target_ref], ['Thanks, will do!', 'session', WORKOUT.id]);
+  assert.ok(thread.querySelector('.cm-to').hidden, 'the next comment is about nothing in particular again');
+  assert.ok(onWorkout);
+});
+
+test('comments written offline wait and go up when the connection is back; you can delete your own', async t => {
+  const { server, a } = await coached(t);
+  server.offline = true;
+  await a.w.syncSendComment('general', null, 'Written with no signal at the gym');
+  await a.settle();
+  assert.equal(server.rows('comments').length, 0);
+  assert.equal(a.w.syncPending(), 1, 'it counts as waiting to upload');
+  a.doc.getElementById('coach-name').click();
+  assert.match(a.doc.querySelector('#mbox .cm-thread').textContent, /Sending…/);
+  server.offline = false;
+  a.w.dispatchEvent(new a.w.Event('online'));
+  await a.settle();
+  assert.deepEqual(server.rows('comments').map(c => c.body), ['Written with no signal at the gym']);
+  assert.equal(a.w.syncPending(), 0);
+  // a resend after a lost answer is not a second comment
+  const id = server.rows('comments')[0].id;
+  assert.equal((await server.api.addComment({ id, client_id: ME.id, author_id: ME.id, target_type: 'general', target_ref: null, body: 'x' })).error.code, '23505');
+  await a.w.syncRemoveComment(id); await a.settle();
+  assert.ok(server.rows('comments')[0].deleted_at, 'deleted for the coach too');
+  assert.equal(a.w.syncCommentList().length, 0);
+});
+
+test('comments show where they belong: a workout in the history, a day of meals, a check-in', async t => {
+  const checkin = { id: '66666666-6666-4666-8666-666666666666', date: '2026-11-22', kg: 72.9, waist: 79.5, note: '' };
+  const { server, a } = await coached(t, { sessions: [WORKOUT], body: [checkin] });
+  server.coachSays('Great bench.', 'session', WORKOUT.id);
+  server.coachSays('Waist is going down, nice.', 'checkin', checkin.id);
+  await a.w.syncNow({ pull: true }); await a.settle();
+  a.w.closeModal();
+  a.w.openHistoryModal(WORKOUT.id);
+  const hist = a.doc.querySelector('#mbox details.hist');
+  assert.match(hist.querySelector('summary').textContent, /1 comment/);
+  assert.match(hist.querySelector('.cm-block').textContent, /Great bench\..*Reply/);
+  a.w.closeModal();
+  a.doc.getElementById('t-body').click();
+  assert.match(a.doc.querySelector('.item-cm').textContent, /Waist is going down, nice\./);
+  a.doc.getElementById('t-meals').click();
+  const tail = a.doc.querySelector('.cm-tail');
+  assert.equal(tail.querySelector('.cm-open').textContent, "Comment on this day's meals");
+  tail.querySelector('.cm-open').click();
+  tail.querySelector('textarea').value = 'Ate out tonight';
+  tail.querySelector('form').dispatchEvent(new a.w.Event('submit', { cancelable: true }));
+  await a.settle();
+  const said = server.rows('comments').find(c => c.author_id === ME.id);
+  assert.deepEqual([said.target_type, said.target_ref], ['food_day', a.w.foodDate]);
+  // without a coach and without comments, none of this shows
+  const b = app(t, fakeServer(), { saved: { sessions: [WORKOUT] } });
+  await b.signIn();
+  b.w.openHistoryModal(WORKOUT.id);
+  assert.equal(b.doc.querySelector('#mbox .cm-block'), null);
+  assert.equal(b.doc.getElementById('coach-name').hidden, true);
+});
+
+// A browser with notifications, enough for push.js: permission given, a service worker, a push subscription.
+function fakeBrowserPush(w) {
+  let sub = null;
+  w.Notification = { permission: 'default', requestPermission: async () => { w.Notification.permission = 'granted'; return 'granted'; } };
+  w.PushManager = function () { };
+  const pushManager = {
+    getSubscription: async () => sub,
+    subscribe: async () => {
+      const j = { endpoint: 'https://fcm.googleapis.com/fcm/send/phone-1', keys: { p256dh: 'B' + 'A'.repeat(86), auth: 'C'.repeat(22) } };
+      sub = { endpoint: j.endpoint, options: {}, toJSON: () => j, unsubscribe: async () => { sub = null; return true; } };
+      return sub;
+    }
+  };
+  const reg = { pushManager };
+  Object.defineProperty(w.navigator, 'serviceWorker', { configurable: true, value: { register: async () => reg, ready: Promise.resolve(reg), getRegistration: async () => reg, addEventListener: () => {} } });
+}
+
+test('notifications on this phone are saved for the account; reminders sync with the time zone and the next workout', async t => {
+  const { server, a } = await coached(t, { sessions: [{ ...WORKOUT, date: '2026-11-20' }] });
+  fakeBrowserPush(a.w);
+  a.doc.getElementById('t-plan').click();
+  const card = a.doc.querySelector('.notif-card');
+  const pill = text => [...card.querySelectorAll('button')].find(b => b.textContent.startsWith(text));
+  pill('Notifications on this phone').click();
+  await a.settle();
+  assert.deepEqual([...server.pushes.values()].map(r => [r.user_id, r.endpoint, r.lang]), [[ME.id, 'https://fcm.googleapis.com/fcm/send/phone-1', 'en']]);
+  assert.equal(a.doc.getElementById('toast').textContent, 'Notifications on ✓');
+  const card2 = a.doc.querySelector('.notif-card');
+  [...card2.querySelectorAll('button')].find(b => b.textContent.startsWith('Remind me on training days')).click();
+  const days = [...a.doc.querySelectorAll('.rem-days button')];
+  assert.deepEqual(days.map(b => b.textContent), ['Sa', 'Su', 'Mo', 'Tu', 'We', 'Th', 'Fr']);
+  assert.deepEqual(days.filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.getAttribute('aria-label')), ['Friday'], 'first guess: the days they trained lately');
+  days[2].click();  // and Monday
+  const time = a.doc.querySelector('.rem-time input');
+  time.value = '18:30'; time.dispatchEvent(new a.w.Event('change'));
+  await new Promise(r => a.w.setTimeout(r, 1300)); await a.settle();
+  const rem = server.rows('client_settings').find(r => r.key === 'reminder').value;
+  assert.deepEqual([rem.on, rem.days, rem.time, rem.next], [true, [1, 5], '18:30', 'Pull']);
+  assert.ok(rem.tz, 'with the phone time zone');
+  // switching off this phone forgets its subscription on the server
+  [...a.doc.querySelectorAll('.notif-card button')].find(b => b.textContent.startsWith('Notifications on this phone')).click();
+  await a.settle();
+  assert.equal(server.pushes.size, 0);
+  // and signing out forgets it too
+  a.doc.querySelector('.notif-card button').click(); await a.settle();
+  assert.equal(server.pushes.size, 1);
+  await a.w.syncSignOut(false); await a.settle();
+  assert.equal(server.pushes.size, 0);
+});
+
+test('comments and notifications are in Arabic when the app is', async t => {
+  const { server, a } = await coached(t, { sessions: [WORKOUT], lang: 'ar' });
+  server.coachSays('Great bench.', 'session', WORKOUT.id);
+  await a.w.syncNow({ pull: true }); await a.settle();
+  assert.match(a.doc.getElementById('toast').textContent, /تعليق جديد من الكابتن/);
+  a.doc.getElementById('coach-name').click(); await a.tick();
+  const english = root => [...root.querySelectorAll('*')].filter(n => !n.children.length && /[A-Za-z]{2}/.test(n.textContent) && !/[؀-ۿ]/.test(n.textContent) && !n.closest('[translate=no]')).map(n => n.textContent);
+  assert.deepEqual(english(a.doc.getElementById('mbox')), []);
+  assert.equal(a.doc.querySelector('#mbox .cm-body').getAttribute('dir'), 'auto', 'what people wrote keeps its own direction');
+  a.w.closeModal();
+  fakeBrowserPush(a.w);
+  a.doc.getElementById('t-plan').click(); await a.tick();
+  assert.deepEqual(english(a.doc.querySelector('.notif-card')), []);
 });

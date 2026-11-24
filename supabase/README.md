@@ -6,6 +6,8 @@
 |---|---|
 | `migrations/0001_coach_core.sql` | الجداول والصلاحيات (RLS) والدوال وتخزين الصور. **ده اللي بيتنفّذ على المشروع.** |
 | `migrations/0002_delete_account.sql` | `delete_my_account()`: كل واحد يمسح حسابه وكل بياناته (المرحلة ١) |
+| `migrations/0003_comments_push.sql` | التعليقات (إيصال القراية، وصندوق الكابتن)، واشتراكات الإشعارات، والإشعار اللي بيتبعت لكل حدث، وتذكير أيام التمرين (المرحلة ٤) |
+| `functions/push/` | الـ Edge Function اللي بتشفّر الإشعار وتبعته (Web Push بـ VAPID). `index.ts` للنشر، والشغل في `handler.mjs` و`webpush.mjs` |
 | `tests/rls.test.cjs` | اختبارات بتثبت كل قاعدة صلاحية على Postgres محلي |
 | `tests/supabase_stub.sql` | نسخة مصغّرة من Supabase للاختبارات بس. **ماتنفذوش على المشروع الحقيقي** |
 
@@ -51,6 +53,18 @@
   - لما الكابتن عدّل البرنامج، الكلاينت شاف «الكابتن حدّث برنامجك».
 
   مفيش migration جديد هنا كمان.
+- **المرحلة ٤ (التعليقات والإشعارات):**
+  - **`0003_comments_push.sql` اتطبق.** شغّل `pg_net` و`pg_cron`، وعمل مهمة `gymlog-reminders` كل ١٥ دقيقة.
+  - **الـ Edge Function `push` اتنشرت** من `functions/push` بالـ Management API (`POST /v1/projects/{ref}/functions/deploy`)، والـ JWT check مقفول لأن اللي بيناديها قاعدة البيانات بس، بسر مشترك.
+  - **الـ secrets بتاعتها اتحطّت** (الأسماء بس هنا، القيم عمرها ما اتكتبت في ملف ولا شات): `PUSH_SECRET`، `VAPID_PUBLIC_KEY`، `VAPID_PRIVATE_KEY`، `VAPID_SUBJECT`. والمفتاح العام نسخته في `js/config.js`.
+  - **في Vault اتحط سرّين** بتقراهم قاعدة البيانات: `push_url` (عنوان الـ function) و`push_secret` (نفس `PUSH_SECRET`). من غيرهم مفيش إشعار بيتبعت، وكل حاجة تانية شغالة عادي.
+  - **الاختبار على المشروع الحقيقي** بكابتن وكلاينت وهميين اتمسحوا بعدها، و٣٢ من ٣٢ نجحوا:
+    - التعليقات في الاتجاهين، وإيصال القراية، وتنبيه «ينتظر ردك».
+    - تعليق اتكتب أوفلاين واترفع لوحده.
+    - الإشعارات والتذكير لحد خدمة Google: المتصفح هنا مالوش خدمة إشعارات، فاتجرّب بعنوان FCM وهمي بمفاتيح حقيقية. Google ردّت إن العنوان مش موجود، والعنوان اتمسح لوحده.
+    - العربي.
+  - **اتجرّب كمان مباشرة:** تعليق من الكابتن، وبرنامج جديد، وصلوا للـ function ولـ Google.
+  - **ملحوظة:** Supabase بقى مابيدّيش أدوار الـ API صلاحيات على الجداول الجديدة لوحده، فالـ migration بيدّي `service_role` (اللي الـ function بتستخدمه) القراءة والمسح على `push_subscriptions` بس.
 - **إعدادات الدخول:**
   - Site URL هو `https://abohamada15423.github.io/gym-log/`.
   - Redirect URLs هي الموقع و`localhost:8000` و`localhost:8765`.
@@ -135,6 +149,33 @@ What the tests prove (one test each):
 
 The suite was also checked against eleven deliberate breakages of the migration (anon access, missing `search_path`, coach editing client comments, writable `read_at`, editable `role`, older edits winning, re-activating archived links, reusable invites, invites reusable after account deletion, checking the code before the existing coach, coaches reading other folders). Each one made a test fail.
 
+Phase 4 (`0003_comments_push.sql`) adds seven more:
+
+- push subscriptions: your own only; only the big push services' addresses; one browser can hold two accounts; at most 20 per account; the push function's role can find and delete them and nothing else
+- a new comment is sent to the other side of the thread, in each browser's language, with the Vault secret; with no secret set, or nobody to tell, nothing is sent
+- read receipts for chosen comments; the coach inbox counts unread comments and knows when the client has the last word
+- a program or meal plan is announced once, and only when what the client follows changed; templates and retired plans say nothing
+- training reminders: chosen days and time in the phone's time zone, once a day, never after a workout, never more than two hours late; an unknown time zone is skipped
+- the helpers in `private` can't be called by anyone; the reminder job runs every 15 minutes; deleting an account removes its subscriptions
+
+The local stand-ins for `pg_net`, Vault and `pg_cron` in `supabase_stub.sql` record what would be sent, so the tests read the exact notifications. These tests were checked against eleven deliberate breakages of `0003` (any https address accepted, subscriptions readable by everyone, no per-account limit, read receipts ignoring the ids, a comment sent back to its author, an unchanged plan announced again, a reminder after a workout, two reminders a day, helpers callable by users, the wrong "last word" in the inbox, the push function's role without its grant). Each one made a test fail.
+
+## The push function
+
+`functions/push` sends the notifications the database asks for. It holds no rules of its own: each request from the database (`private.push()`) is a list of jobs, one per browser, already written in that browser's language. It encrypts each one (RFC 8291) and signs the request (VAPID, RFC 8292) with WebCrypto only, then forgets browsers the push service says are gone. `tests/push.test.cjs` checks the encryption byte for byte against the worked example in RFC 8291.
+
+To deploy it again after a change (needs a Supabase access token, through the session's credentials):
+
+```bash
+curl -X POST "https://api.supabase.com/v1/projects/wacekcjwcvcawdptbgwv/functions/deploy?slug=push" \
+  -F 'metadata={"entrypoint_path":"index.ts","name":"push","verify_jwt":false};type=application/json' \
+  -F 'file=@supabase/functions/push/index.ts;filename=index.ts' \
+  -F 'file=@supabase/functions/push/handler.mjs;filename=handler.mjs' \
+  -F 'file=@supabase/functions/push/webpush.mjs;filename=webpush.mjs'
+```
+
+Keep the VAPID keys as they are: browsers subscribe with the public key, so new keys mean everyone turns notifications on again.
+
 ## Changing the schema later
 
-Add a new file, `migrations/0002_<what>.sql`. Don't edit a migration that already ran on the project. Add tests for any new rule to `tests/rls.test.cjs` and run `npm run test:db` before applying the file in the SQL editor.
+Add a new file, `migrations/0004_<what>.sql`. Don't edit a migration that already ran on the project. Add tests for any new rule to `tests/rls.test.cjs` and run `npm run test:db` before applying the file in the SQL editor.

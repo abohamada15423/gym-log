@@ -27,7 +27,7 @@ function save() { }
 // edit: the program or meal plan being written ({ kind, clientId (null = template), rowId, draft, dirty }).
 // templates: the coach's own programs and meal plans with no client, loaded when first needed.
 var C = { phase: "loading", me: null, clients: [], byId: {}, view: "list", id: null, tab: "summary", client: null, error: null, tallied: false, edit: null, templates: null };
-var CLIENT_TABS = [["summary", "Summary"], ["workouts", "Workouts"], ["meals", "Meals"], ["body", "Body"], ["program", "Program"], ["mealplan", "Meal plan"], ["notes", "Notes"]];
+var CLIENT_TABS = [["summary", "Summary"], ["comments", "Comments"], ["workouts", "Workouts"], ["meals", "Meals"], ["body", "Body"], ["program", "Program"], ["mealplan", "Meal plan"], ["notes", "Notes"]];
 
 /* ---------- talking to the server ---------- */
 // The coach page has its own sign-in, kept apart from the app's, so signing in here never links the
@@ -83,7 +83,19 @@ var coachApi = window.coachApi || {
   setStatus: function (me, id, status) { return coachDb().from("coach_clients").update({ status: status }).eq("coach_id", me).eq("client_id", id).then(must); },
   invites: function () { return coachDb().from("invites").select("code,expires_at,created_at").is("used_at", null).order("created_at", { ascending: false }).then(must); },
   createInvite: function (days) { return coachDb().rpc("create_invite", { p_days: days }).then(must); },
-  withdrawInvite: function (code) { return coachDb().from("invites").delete().eq("code", code).then(must); }
+  withdrawInvite: function (code) { return coachDb().from("invites").delete().eq("code", code).then(must); },
+  // comments (phase 4): per client, unread and whether the last word is theirs; one client's thread
+  inbox: function () { return coachDb().rpc("comment_inbox").then(must); },
+  comments: function (id) {
+    return coachDb().from("comments").select("id,author_id,target_type,target_ref,body,created_at,read_at").eq("client_id", id).is("deleted_at", null)
+      .order("created_at", { ascending: false }).limit(1000).then(must).then(function (rows) { return (rows || []).reverse(); });
+  },
+  addComment: function (row) { return coachDb().from("comments").insert(row).then(must); },
+  removeComment: function (id) { return coachDb().from("comments").update({ deleted_at: new Date().toISOString() }).eq("id", id).then(must); },
+  markRead: function (clientId, ids) { return coachDb().rpc("mark_comments_read", { p_client: clientId, p_ids: ids }).then(must); },
+  // notifications in this browser
+  savePush: function (row) { return coachDb().from("push_subscriptions").upsert(row, { onConflict: "user_id,endpoint" }).then(must); },
+  dropPush: function (me, endpoint) { return coachDb().from("push_subscriptions").delete().eq("user_id", me).eq("endpoint", endpoint).then(must); }
 };
 function netMsg(e) {
   return e && (e.net || /fetch|network|load failed/i.test(String(e.message))) ? "No connection. Check your internet and try again." : String(e && e.message || "Something went wrong. Try again.");
@@ -201,11 +213,12 @@ async function start() {
     await loadRoster();
     C.phase = "ready";
     route();
+    refreshBell();
   } catch (e) { C.phase = "error"; C.error = netMsg(e); render(); }
 }
 async function loadRoster() {
   var links = await coachApi.links(C.me.id), ids = links.map(function (l) { return l.client_id; }), now = today();
-  var people = {}, got = [[], [], [], [], [], [], []];
+  var people = {}, got = [[], [], [], [], [], [], [], []];
   if (ids.length) {
     (await coachApi.profiles(ids)).forEach(function (p) { people[p.id] = p; });
     got = await Promise.all([
@@ -214,9 +227,11 @@ async function loadRoster() {
       coachApi.rows("body_checkins", ids, "client_id,date,kg", null),
       coachApi.rows("habit_days", ids, "client_id,date", ymdAdd(now, -14)),
       coachApi.rows("client_settings", ids, "client_id,key,value", null),
-      coachApi.plans(ids), coachApi.programs(ids)
+      coachApi.plans(ids), coachApi.programs(ids), coachApi.inbox()
     ]);
   }
+  var inbox = {};
+  (got[7] || []).forEach(function (r) { inbox[r.client_id] = r; });
   var of = function (list, id) { return list.filter(function (r) { return r.client_id === id; }); };
   C.clients = links.map(function (l) {
     var id = l.client_id, set = settingsOf(of(got[4], id));
@@ -225,8 +240,10 @@ async function loadRoster() {
       goals: set.goals && typeof set.goals === "object" ? set.goals : {}, custom: set.custom_program,
       plan: newest(of(got[5], id)), program: newest(of(got[6], id)), startedAt: l.started_at
     };
-    var name = people[id] && people[id].full_name;
-    return { id: id, name: name || "Client", status: l.status, startedAt: l.started_at, sum: clientSummary(d, now) };
+    var name = people[id] && people[id].full_name, box = inbox[id] || {};
+    var c = { id: id, name: name || "Client", status: l.status, startedAt: l.started_at, sum: clientSummary(d, now), unread: box.unread || 0, waiting: !!box.waiting, lastComment: box.last_at || null };
+    commentFlag(c);
+    return c;
   });
   C.byId = {};
   C.clients.forEach(function (c) { C.byId[c.id] = c; });
@@ -240,13 +257,13 @@ async function loadClient(id) {
     coachApi.rows("habit_days", [id], "date,data", from),
     coachApi.rows("client_settings", [id], "key,value", null),
     coachApi.plans([id]), coachApi.programs([id]),
-    coachApi.note(C.me.id, id)
+    coachApi.note(C.me.id, id), coachApi.comments(id)
   ]);
   var prog = newest(got[6]), plan = newest(got[5]);
   return {
     id: id, state: toState({ sessions: got[0], food: got[1], body: got[2], habits: got[3], settings: got[4] }),
     plan: plan, program: prog && Array.isArray(prog.days) ? { name: prog.name, days: prog.days } : null,
-    programRow: prog, planRow: plan, note: got[7] || ""
+    programRow: prog, planRow: plan, note: got[7] || "", comments: (got[8] || []).map(cmRow)
   };
 }
 
@@ -254,19 +271,19 @@ async function loadClient(id) {
 function route() {
   var q = new URLSearchParams(location.hash.slice(1)), id = q.get("client");
   if (C.phase !== "ready") { render(); return; }
-  if (location.hash === "#templates") { C.view = "templates"; C.id = null; C.client = null; state = baseState; render(); return; }
+  if (location.hash === "#templates") { C.view = "templates"; C.id = null; C.client = null; commentsSource = null; state = baseState; render(); return; }
   if (!id || !C.byId[id]) { openList(); return; }
   var tab = q.get("tab");
   C.tab = CLIENT_TABS.some(function (t) { return t[0] === tab; }) ? tab : "summary";
   if (C.view === "client" && C.id === id && C.client) { state = C.client.state; render(); return; }
-  C.view = "client"; C.id = id; C.client = null; state = baseState; mbOffset = 0; calMonth = null;
+  C.view = "client"; C.id = id; C.client = null; commentsSource = null; state = baseState; mbOffset = 0; calMonth = null;
   render();
   loadClient(id).then(function (cl) {
     if (C.id !== id) return;
-    C.client = cl; state = cl.state; render();
+    C.client = cl; state = cl.state; commentsSource = coachComments(C.byId[id], cl); render();
   }).catch(function (e) { if (C.id === id) { C.error = netMsg(e); C.client = { failed: true }; render(); } });
 }
-function openList() { C.view = "list"; C.id = null; C.client = null; state = baseState; render(); }
+function openList() { C.view = "list"; C.id = null; C.client = null; commentsSource = null; state = baseState; render(); }
 function go(hash) { if (location.hash !== hash) location.hash = hash; else route(); }
 window.addEventListener("hashchange", route);
 
@@ -276,6 +293,7 @@ function render() {
   $("c-lang").textContent = coachPrefs.lang === "ar" ? "English" : "العربية";
   $("c-lang").setAttribute("lang", coachPrefs.lang === "ar" ? "en" : "ar");
   $("c-out").hidden = !C.me;
+  paintBell();
   var nav = $("c-nav");
   nav.hidden = C.phase !== "ready";
   nav.querySelectorAll("a").forEach(function (a) { a.setAttribute("aria-current", String(a.getAttribute("data-view") === (C.view === "templates" ? "templates" : "list") && C.phase === "ready" ? "page" : false)); });
@@ -360,7 +378,8 @@ function clientRow(c) {
   [
     h("div", { class: "c-col c-who" }, [
       h("span", { class: "acct-av", "aria-hidden": "true", translate: "no", text: initials(c.name) }),
-      h("div", {}, [h("b", { text: c.name, translate: "no" }), h("small", { text: activeText(s.lastActive) })])
+      h("div", {}, [h("b", { text: c.name, translate: "no" }), h("small", { text: activeText(s.lastActive) }),
+        c.unread ? h("span", { class: "c-new", text: c.unread === 1 ? "1 new comment" : c.unread + " new comments" }) : null])
     ]),
     h("div", { class: "c-col c-week" }, [weekTally(s.done, s.planned), h("small", { text: weekLabel })]),
     pro, kg,
@@ -432,14 +451,16 @@ function renderClient(root) {
   ]));
   var tabs = h("nav", { class: "c-tabs", "aria-label": "Client" });
   CLIENT_TABS.forEach(function (t) {
-    tabs.appendChild(h("a", { href: "#client=" + c.id + "&tab=" + t[0], text: t[1], "aria-current": C.tab === t[0] ? "page" : "false" }));
+    var a = h("a", { href: "#client=" + c.id + "&tab=" + t[0], "aria-current": C.tab === t[0] ? "page" : "false" }, [t[1]]);
+    if (t[0] === "comments") { a.appendChild(h("span", { class: "c-tabn", "aria-label": "new", text: c.unread ? String(c.unread) : "" })); a.classList.toggle("has-new", !!c.unread); }
+    tabs.appendChild(a);
   });
   root.appendChild(tabs);
   var body = h("div", { class: "c-tab" });
   root.appendChild(body);
   if (!cl) { body.appendChild(h("p", { class: "c-quiet", text: "Loading…" })); return; }
   if (cl.failed) { body.appendChild(h("p", { class: "form-err", text: C.error })); return; }
-  ({ summary: tabSummary, workouts: tabWorkouts, meals: tabMeals, body: tabBody, program: tabProgram, mealplan: tabMealPlan, notes: tabNotes })[C.tab](body, c, cl);
+  ({ summary: tabSummary, comments: tabComments, workouts: tabWorkouts, meals: tabMeals, body: tabBody, program: tabProgram, mealplan: tabMealPlan, notes: tabNotes })[C.tab](body, c, cl);
 }
 function setStatus(c, status) {
   coachApi.setStatus(C.me.id, c.id, status).then(function () {
@@ -475,14 +496,15 @@ function tabWorkouts(body) {
     var nSets = 0; Object.keys(s.sets || {}).forEach(function (k) { nSets += s.sets[k].length; });
     var ex = h("ul", { class: "c-sets" });
     Object.keys(s.sets || {}).forEach(function (k) {
-      ex.appendChild(h("li", {}, [h("span", {}, [h("b", { class: "c-exname", text: k }), h("span", { class: "c-setnums", translate: "no", text: setLine(s.sets[k]) })]), s.notes && s.notes[k] ? h("small", { text: s.notes[k] }) : null]));
+      ex.appendChild(h("li", {}, [h("span", {}, [h("b", { class: "c-exname", text: k }), h("span", { class: "c-setnums", translate: "no", text: setLine(s.sets[k]) })]), s.notes && s.notes[k] ? h("small", { translate: "no", text: s.notes[k] }) : null]));
     });
     panel.appendChild(h("article", { class: "c-entry" }, [
       h("div", { class: "c-when" }, [h("b", { text: mbDay(s.date) }), h("small", { text: sessionName(s) })]),
       h("div", {}, [
         h("p", { class: "c-small c-quiet", text: nSets + " sets, " + Math.round(sessionVolume(s)).toLocaleString() + " kg volume" }),
         ex,
-        s.note ? h("p", { class: "c-said" }, [h("small", { text: "Their note" }), s.note]) : null
+        s.note ? h("p", { class: "c-said" }, [h("small", { text: "Their note" }), h("span", { translate: "no", text: s.note })]) : null,
+        commentBlock("session", s.id, { cta: "Comment on this workout", placeholder: "Your comment on this workout…" })
       ])
     ]));
   });
@@ -510,13 +532,17 @@ function tabMeals(body) {
   keys.forEach(function (k) {
     var items = days[k], kc = 0, pr = 0;
     items.forEach(function (f) { kc += f.kcal; pr += f.p; });
-    var det = h("details", { class: "c-day" }, [
+    var said = cmOn("food_day", k), fresh = cmUnread(said).length;
+    var cms = commentBlock("food_day", k, { later: true, cta: "Comment on this day", placeholder: "Your comment on this day's meals…" });
+    var det = h("details", { class: "c-day" + (fresh ? " has-new" : "") }, [
       h("summary", {}, [
-        h("div", { class: "c-when" }, [h("b", { text: mbDay(k) }), h("small", { text: items.length === 1 ? "1 food" : items.length + " foods" })]),
+        h("div", { class: "c-when" }, [h("b", { text: mbDay(k) }), h("small", { text: (items.length === 1 ? "1 food" : items.length + " foods") + (said.length ? " · " + (said.length === 1 ? "1 comment" : said.length + " comments") : "") })]),
         meter(kc, kcalT, "kcal"), meter(pr, proT, "g protein")
       ]),
-      h("ul", { class: "c-sets" }, items.map(function (f) { return h("li", {}, [h("span", { text: f.name }), h("small", { text: f.kcal + " kcal, " + mbFmt(f.p) + " g protein" })]); }))
+      h("ul", { class: "c-sets" }, items.map(function (f) { return h("li", {}, [h("span", { text: f.name }), h("small", { text: f.kcal + " kcal, " + mbFmt(f.p) + " g protein" })]); })),
+      cms
     ]);
+    det.addEventListener("toggle", function () { if (det.open) { cms.seen(); det.classList.remove("has-new"); } });
     panel.appendChild(det);
   });
   body.appendChild(panel);
@@ -548,13 +574,151 @@ function tabBody(body) {
   entries.slice().reverse().forEach(function (b) {
     panel.appendChild(h("article", { class: "c-entry" }, [
       h("div", { class: "c-when" }, [h("b", { text: mbDay(b.date) }), b.note ? h("small", { text: b.note }) : null]),
-      h("p", { class: "c-metrics" }, BODY_METRICS.filter(function (m) { return b[m.k] != null; }).map(function (m) {
-        return h("span", {}, [h("small", { text: m.label }), h("b", { text: mbFmt(b[m.k]) + (m.unit === "%" ? "%" : " " + m.unit) })]);
-      }))
+      h("div", {}, [
+        h("p", { class: "c-metrics" }, BODY_METRICS.filter(function (m) { return b[m.k] != null; }).map(function (m) {
+          return h("span", {}, [h("small", { text: m.label }), h("b", { text: mbFmt(b[m.k]) + (m.unit === "%" ? "%" : " " + m.unit) })]);
+        })),
+        commentBlock("checkin", b.id, { cta: "Comment on this check-in", placeholder: "Your comment on this check-in…" })
+      ])
     ]));
   });
   body.appendChild(panel);
 }
+/* ---------- comments (phase 4) ---------- */
+function cmRow(r) {
+  return { id: r.id, author: r.author_id, type: CM_TYPES[r.target_type] ? r.target_type : "general", ref: r.target_ref == null ? null : String(r.target_ref), body: String(r.body || ""), at: r.created_at, read: r.read_at || null };
+}
+// "Waiting for your reply": the last word in the thread is the client's. It puts them under Needs you.
+function commentFlag(c) {
+  c.sum.flags = c.sum.flags.filter(function (f) { return f.k !== "comment"; });
+  if (c.waiting) c.sum.flags.unshift({ k: "comment", text: "Waiting for your reply" });
+}
+function lastWordIsTheirs(c, cl) { var live = cl.comments.filter(function (x) { return !x.pending && !x.failed; }), last = live[live.length - 1]; return !!last && last.author === c.id; }
+// The count on the Comments tab, kept up to date without redrawing the page (and losing what's typed).
+function paintCommentCount(c) {
+  var a = $("view").querySelector('.c-tabs a[href$="&tab=comments"]'); if (!a) return;
+  a.classList.toggle("has-new", !!c.unread);
+  a.querySelector(".c-tabn").textContent = c.unread ? String(c.unread) : "";
+}
+// What comments.js draws for one client: their thread, written to straight away (the coach page needs a connection).
+function coachComments(c, cl) {
+  return {
+    me: function () { return C.me.id; },
+    them: function () { return c.name; },
+    raw: true,
+    all: function () { return cl.comments; },
+    send: function (type, ref, body) {
+      var row = { id: rid(), client_id: c.id, author_id: C.me.id, target_type: CM_TYPES[type] ? type : "general", target_ref: ref == null ? null : String(ref), body: String(body).slice(0, 2000) };
+      var mine = { id: row.id, author: C.me.id, type: row.target_type, ref: row.target_ref, body: row.body, at: new Date().toISOString(), read: null, pending: true };
+      cl.comments.push(mine);
+      return coachApi.addComment(row).then(function () {
+        delete mine.pending;
+        c.waiting = false; commentFlag(c);
+      }, function (e) {
+        cl.comments = cl.comments.filter(function (x) { return x !== mine; });
+        throw new Error(netMsg(e));
+      });
+    },
+    remove: function (id) {
+      return coachApi.removeComment(id).then(function () {
+        cl.comments = cl.comments.filter(function (x) { return x.id !== id; });
+        c.waiting = lastWordIsTheirs(c, cl); commentFlag(c);
+      }, function (e) { throw new Error(netMsg(e)); });
+    },
+    seen: function (ids) {
+      var n = 0, now = new Date().toISOString();
+      cl.comments.forEach(function (x) { if (ids.indexOf(x.id) > -1 && x.author !== C.me.id && !x.read) { x.read = now; n++; } });
+      if (!n) return;
+      c.unread = Math.max(0, c.unread - n);
+      paintCommentCount(c);
+      coachApi.markRead(c.id, ids).catch(function () { });  // the next load counts them again if this didn't land
+    }
+  };
+}
+function tabComments(body, c) {
+  var th = commentThread({
+    placeholder: "Write to " + c.name + "…", label: "Comment for " + c.name,
+    empty: "No comments yet. Write to " + c.name + " about anything: a workout, their meals or a check-in. Comments on a workout, a day of meals or a check-in show up here too."
+  });
+  body.appendChild(h("section", { class: "c-panel c-talk" }, [th]));
+  // a long thread: start at the newest, where the box to write in is
+  if (cmAll().length > 6 && th.input.scrollIntoView) th.input.scrollIntoView({ block: "nearest" });
+}
+// New comments while the page is open: the inbox every minute, and right away when a notification comes in.
+async function pollComments() {
+  if (C.phase !== "ready" || C.polling || document.visibilityState === "hidden") return;
+  C.polling = true;
+  try {
+    var rows = await coachApi.inbox(), news = false;
+    (rows || []).forEach(function (r) {
+      var c = C.byId[r.client_id]; if (!c) return;
+      if (c.lastComment !== (r.last_at || null) || c.unread !== r.unread) news = true;
+      c.unread = r.unread; c.waiting = !!r.waiting; c.lastComment = r.last_at || null; commentFlag(c);
+    });
+    if (!news) return;
+    if (C.view === "client" && C.client && C.client.comments) {
+      var id = C.id, fresh = (await coachApi.comments(id)).map(cmRow);
+      if (C.id !== id || !C.client) return;
+      C.client.comments = fresh;
+      // never redraw under someone's fingers: a half-written comment or an open editor stays as it is
+      var typing = Array.prototype.some.call(document.querySelectorAll(".cm-compose textarea, .c-notes"), function (t) { return t.value.trim() && t === document.activeElement; });
+      if (!typing && !C.edit && $("modal").hidden) render(); else paintCommentCount(C.byId[id]);
+    } else if (C.view === "list" && $("modal").hidden) render();
+  } catch (e) { /* offline: try again next time */ } finally { C.polling = false; }
+}
+setInterval(pollComments, 60000);
+document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") pollComments(); });
+
+/* ---------- notifications in this browser (phase 4) ---------- */
+function bellOn() { return !!(C.me && coachPrefs.push && coachPrefs.push.uid === C.me.id) && typeof Notification !== "undefined" && Notification.permission === "granted"; }
+var BELL_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 16.5v-5a5.5 5.5 0 0111 0v5l1.6 2H4.9z"/><path d="M10 21h4"/></svg>';
+// One button, always called Notifications: pressed (lime) when this browser gets them.
+function paintBell() {
+  var b = $("c-bell"); if (!b) return;
+  b.hidden = !(C.phase === "ready" && C.me && pushSupported());
+  if (b.hidden) return;
+  var on = bellOn();
+  if (!b.firstChild) { b.innerHTML = BELL_SVG; b.appendChild(h("span", { text: "Notifications" })); }
+  b.setAttribute("aria-pressed", String(on));
+  b.title = on ? "You get a notification when a client writes to you. Tap to turn it off." : "Get a notification when a client writes to you";
+}
+$("c-bell").onclick = function () {
+  var b = $("c-bell");
+  if (bellOn()) {
+    var p = coachPrefs.push; coachPrefs.push = null; savePrefs(); paintBell();
+    coachApi.dropPush(C.me.id, p.endpoint).then(function () { toast("Notifications off in this browser"); }, function (e) { toast(netMsg(e), 3200); });
+    return;
+  }
+  b.disabled = true;
+  pushSubscribe().then(function (row) {
+    row.user_id = C.me.id; row.lang = coachPrefs.lang;
+    return coachApi.savePush(row).then(function () {
+      coachPrefs.push = { uid: C.me.id, endpoint: row.endpoint, lang: row.lang }; savePrefs();
+      toast("Notifications on ✓ You'll hear when a client writes to you.", 3600);
+    });
+  }).catch(function (e) { toast(e && e.push ? pushMsg(e) : netMsg(e), 4200); })
+    .then(function () { b.disabled = false; paintBell(); });
+};
+// Start-up and language changes: keep what's saved the same as this browser's subscription.
+function refreshBell() {
+  var p = coachPrefs.push;
+  if (!C.me || !p || p.uid !== C.me.id) return;
+  pushCurrent().then(function (row) {
+    if (!row) { coachPrefs.push = null; savePrefs(); paintBell(); return coachApi.dropPush(C.me.id, p.endpoint); }
+    if (row.endpoint === p.endpoint && p.lang === coachPrefs.lang) return;
+    row.user_id = C.me.id; row.lang = coachPrefs.lang;
+    return coachApi.savePush(row).then(function () {
+      if (row.endpoint !== p.endpoint) coachApi.dropPush(C.me.id, p.endpoint).catch(function () { });
+      coachPrefs.push = { uid: C.me.id, endpoint: row.endpoint, lang: row.lang }; savePrefs();
+    });
+  }).catch(function () { });
+}
+// a tapped notification while this page is open: go to the client it's about
+pushListen(function (url) {
+  var hash = ""; try { hash = new URL(url, location.href).hash; } catch (e) { }
+  if (hash && location.hash !== hash) location.hash = hash; else pollComments();
+}, function () { pollComments(); });
+
 function tabNotes(body, c, cl) {
   var area = h("textarea", { class: "c-notes", "aria-label": "Private notes about " + c.name, placeholder: "Injuries, goals, what you agreed, how they're doing…" });
   area.value = cl.note || "";
@@ -984,11 +1148,15 @@ $("c-lang").onclick = function () {
   coachPrefs.lang = coachPrefs.lang === "ar" ? "en" : "ar"; savePrefs();
   baseState.lang = coachPrefs.lang;
   if (C.client && C.client.state) C.client.state.lang = coachPrefs.lang;
-  applyLang(); render();
+  applyLang(); render(); refreshBell();
 };
 $("c-out").onclick = function () {
-  coachApi.signOut().catch(function () { }).then(function () {
-    C.me = null; C.clients = []; C.byId = {}; C.client = null; C.view = "list"; state = baseState;
+  var p = coachPrefs.push, me = C.me;
+  coachPrefs.push = null; savePrefs();
+  (p && me && p.uid === me.id ? coachApi.dropPush(me.id, p.endpoint).catch(function () { }) : Promise.resolve()).then(function () {
+    return coachApi.signOut().catch(function () { });
+  }).then(function () {
+    C.me = null; C.clients = []; C.byId = {}; C.client = null; C.view = "list"; commentsSource = null; state = baseState;
     if (location.hash) history.replaceState(null, "", location.pathname);
     C.phase = "signin"; render();
   });

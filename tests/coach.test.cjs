@@ -39,7 +39,8 @@ function fixture() {
     client_settings: [{ client_id: SARA, key: 'goals', value: { kg: 70, protein: 170, kcal: 1900 } }, { client_id: MONA, key: 'goals', value: { kg: 60 } }],
     meal_plans: [{ id: 'plan-omar', coach_id: COACH.id, client_id: OMAR, name: 'Lean bulk', active: true, targets: { kcal: 2800, protein: 170 }, meals: [{ name: 'Breakfast', items: ['4 eggs', 'Oats'], kcal: 700, p: 45 }], modified_at: ago(3) }],
     programs: [],
-    notes: {}, invites: [{ code: 'OLDCODE23456', expires_at: ago(-3), created_at: ago(4) }]
+    notes: {}, invites: [{ code: 'OLDCODE23456', expires_at: ago(-3), created_at: ago(4) }],
+    comments: []
   };
 }
 
@@ -65,7 +66,21 @@ function fakeApi(db, opts = {}) {
     setStatus: async (me, id, status) => { calls.push(['setStatus', id, status]); db.links.find(l => l.client_id === id).status = status; },
     invites: async () => db.invites.map(plain),
     createInvite: async days => { calls.push(['createInvite', days]); const code = 'NEWCODE23456'; db.invites.unshift({ code, expires_at: ago(-days), created_at: ago(0) }); return code; },
-    withdrawInvite: async code => { calls.push(['withdraw', code]); db.invites = db.invites.filter(i => i.code !== code); }
+    withdrawInvite: async code => { calls.push(['withdraw', code]); db.invites = db.invites.filter(i => i.code !== code); },
+    // comments, like public.comment_inbox() and mark_comments_read() in 0003_comments_push.sql
+    inbox: async () => db.links.filter(l => l.status !== 'archived').map(l => {
+      const live = db.comments.filter(c => c.client_id === l.client_id && !c.deleted_at).sort((a, b) => a.created_at < b.created_at ? -1 : 1), last = live[live.length - 1];
+      return { client_id: l.client_id, unread: live.filter(c => c.author_id === l.client_id && !c.read_at).length, waiting: !!last && last.author_id === l.client_id, last_at: last ? last.created_at : null };
+    }),
+    comments: async id => db.comments.filter(c => c.client_id === id && !c.deleted_at).sort((a, b) => a.created_at < b.created_at ? -1 : 1).map(plain),
+    addComment: async row => { calls.push(['addComment', row.client_id, row.target_type, row.target_ref, row.body]); db.comments.push(Object.assign({ created_at: new Date().toISOString(), read_at: null, deleted_at: null }, plain(row))); },
+    removeComment: async id => { calls.push(['removeComment', id]); db.comments.find(c => c.id === id).deleted_at = new Date().toISOString(); },
+    markRead: async (client, ids) => {
+      calls.push(['markRead', client, plain(ids).sort()]);
+      db.comments.forEach(c => { if (c.client_id === client && ids.includes(c.id) && c.author_id !== COACH.id && !c.read_at) c.read_at = new Date().toISOString(); });
+    },
+    savePush: async row => { calls.push(['savePush', row.user_id, row.endpoint, row.lang]); },
+    dropPush: async (me, endpoint) => { calls.push(['dropPush', me, endpoint]); }
   };
   return api;
 }
@@ -246,7 +261,7 @@ test('signing in, and an account that is not a coach is told so', async t => {
 });
 
 test('the dashboard is fully in Arabic when chosen', async t => {
-  const p = page(t, fakeApi(fixture()), { lang: 'ar' });
+  const p = page(t, fakeApi(withComments(fixture())), { lang: 'ar' });
   await p.settle();
   // names, emails, codes and the exercises and foods people typed stay as written
   // text still in English: Latin words and no Arabic at all (a translated line may carry a name)
@@ -254,7 +269,7 @@ test('the dashboard is fully in Arabic when chosen', async t => {
     && !n.closest('[translate=no], svg, .c-exname, .c-sets small, .c-sets span')).map(n => n.textContent);
   assert.equal(p.doc.documentElement.dir, 'rtl');
   assert.deepEqual(english(), []);
-  for (const tab of ['summary', 'workouts', 'meals', 'body', 'program', 'mealplan', 'notes']) {
+  for (const tab of ['summary', 'comments', 'workouts', 'meals', 'body', 'program', 'mealplan', 'notes']) {
     await p.go('#client=' + SARA + '&tab=' + tab);
     assert.deepEqual(english().filter(x => !/^(Bench press|Overhead press|Pull-ups|Squat)$/.test(x)), [], tab);
   }
@@ -398,4 +413,97 @@ test('templates: write one, edit it, delete it', async t => {
   await p.settle(12);
   assert.ok(db.programs[0].deleted_at, 'soft-deleted, like everything else');
   assert.match(view(), /No program templates yet/);
+});
+
+// ---- phase 4: comments ------------------------------------------------------------------------
+// Sara's thread: the coach wrote first, then two of hers are waiting.
+function withComments(db) {
+  const at = n => new Date(Date.now() - n * 60000).toISOString();
+  const sess = db.workout_sessions.find(w => w.client_id === SARA && w.day_id === 'push');
+  db.comments = [
+    { id: 'cm-1', client_id: SARA, author_id: COACH.id, target_type: 'general', target_ref: null, body: 'Welcome! Log everything, I check daily.', created_at: at(300), read_at: at(200), deleted_at: null },
+    { id: 'cm-2', client_id: SARA, author_id: SARA, target_type: 'session', target_ref: sess.id, body: 'Was 62.5 too heavy?', created_at: at(60), read_at: null, deleted_at: null },
+    { id: 'cm-3', client_id: SARA, author_id: SARA, target_type: 'general', target_ref: null, body: 'Also, can I swap rice for potatoes?', created_at: at(30), read_at: null, deleted_at: null }
+  ];
+  return db;
+}
+const submit = (p, form, text) => { form.querySelector('textarea').value = text; form.dispatchEvent(new p.w.Event('submit', { cancelable: true })); };
+
+test('comments: the roster shows new ones and who waits for a reply; the thread marks them read; answering clears it', async t => {
+  const db = withComments(fixture()), api = fakeApi(db), p = page(t, api);
+  await p.settle();
+  const groups = p.rows();
+  const sara = groups[0].rows.find(r => /Sara Ali/.test(r));
+  assert.match(sara, /Sara Ali.*2 new comments.*Waiting for your reply/, 'Sara moves to Needs you: ' + JSON.stringify(groups.map(g => g.title)));
+  assert.match(p.doc.querySelector('.c-lead').textContent, /3 clients need you today/);
+
+  await p.go('#client=' + SARA + '&tab=summary');
+  const tab = p.doc.querySelector('.c-tabs a[href$="tab=comments"]');
+  assert.equal(tab.querySelector('.c-tabn').textContent, '2');
+  await p.go('#client=' + SARA + '&tab=comments');
+  const thread = p.doc.querySelector('.cm-thread');
+  assert.match(thread.textContent, /You.*Welcome!.*Sara Ali.*Push · .*Was 62\.5 too heavy\?.*Sara Ali.*swap rice/);
+  assert.deepEqual(api.calls.filter(c => c[0] === 'markRead'), [['markRead', SARA, ['cm-2', 'cm-3']]]);
+  assert.equal(p.doc.querySelector('.c-tabs a[href$="tab=comments"] .c-tabn').textContent, '', 'the count is gone');
+
+  // answer the workout question: it stays about that workout
+  [...thread.querySelectorAll('.cm.theirs')].find(n => /too heavy/.test(n.textContent)).querySelector('button').click();
+  assert.match(thread.querySelector('.cm-to').textContent, /About Push/);
+  submit(p, thread.querySelector('form'), 'No, keep it and add a rep.');
+  await p.settle();
+  const sess = db.workout_sessions.find(w => w.client_id === SARA && w.day_id === 'push');
+  assert.deepEqual(api.calls.filter(c => c[0] === 'addComment'), [['addComment', SARA, 'session', sess.id, 'No, keep it and add a rep.']]);
+  assert.match(p.doc.querySelector('.cm-thread').textContent, /No, keep it and add a rep\./);
+  await p.go('#');
+  assert.doesNotMatch(p.rows().map(g => g.rows.join(' ')).join(' '), /Waiting for your reply|new comment/);
+});
+
+test('comments on a workout, a day of meals and a check-in, from the client page', async t => {
+  const db = fixture(), api = fakeApi(db), p = page(t, api);
+  await p.settle();
+  await p.go('#client=' + SARA + '&tab=workouts');
+  const firstEntry = p.doc.querySelector('.c-entry');
+  firstEntry.querySelector('.cm-open').click();
+  submit(p, firstEntry.querySelector('.cm-compose'), 'Strong week.');
+  await p.settle();
+  await p.go('#client=' + SARA + '&tab=meals');
+  const dayBox = p.doc.querySelector('details.c-day');
+  dayBox.open = true;
+  dayBox.querySelector('.cm-open').click();
+  submit(p, dayBox.querySelector('.cm-compose'), 'More protein at lunch.');
+  await p.settle();
+  await p.go('#client=' + SARA + '&tab=body');
+  const check = p.doc.querySelectorAll('.c-log')[0].querySelector('.c-entry');
+  check.querySelector('.cm-open').click();
+  submit(p, check.querySelector('.cm-compose'), 'Waist down, great.');
+  await p.settle();
+  const added = api.calls.filter(c => c[0] === 'addComment').map(c => [c[2], c[4]]);
+  assert.deepEqual(added, [['session', 'Strong week.'], ['food_day', 'More protein at lunch.'], ['checkin', 'Waist down, great.']]);
+  const refs = api.calls.filter(c => c[0] === 'addComment').map(c => c[3]);
+  assert.equal(refs[0], db.workout_sessions.filter(w => w.client_id === SARA).sort((a, b) => a.date < b.date ? 1 : -1)[0].id, 'the newest workout');
+  assert.match(refs[1], /^\d{4}-\d\d-\d\d$/, 'a day of meals is its date');
+  assert.equal(refs[2], db.body_checkins.filter(b => b.client_id === SARA).sort((a, b) => a.date < b.date ? 1 : -1)[0].id, 'the newest check-in');
+  // and the day of meals now says it has a comment
+  await p.go('#client=' + SARA + '&tab=meals');
+  assert.match(p.doc.querySelector('details.c-day summary').textContent, /1 comment/);
+});
+
+test('notifications in this browser: one button that saves and forgets the subscription', async t => {
+  const api = fakeApi(fixture()), p = page(t, api);
+  let sub = null;
+  p.w.Notification = { permission: 'default', requestPermission: async () => { p.w.Notification.permission = 'granted'; return 'granted'; } };
+  p.w.PushManager = function () { };
+  const reg = { pushManager: { getSubscription: async () => sub, subscribe: async () => (sub = { endpoint: 'https://web.push.apple.com/coach-1', options: {}, toJSON: () => ({ endpoint: 'https://web.push.apple.com/coach-1', keys: { p256dh: 'B' + 'A'.repeat(86), auth: 'C'.repeat(22) } }) }) } };
+  Object.defineProperty(p.w.navigator, 'serviceWorker', { configurable: true, value: { register: async () => reg, ready: Promise.resolve(reg), getRegistration: async () => reg, addEventListener: () => {} } });
+  await p.settle();
+  p.w.render();
+  const bell = p.doc.getElementById('c-bell');
+  assert.equal(bell.hidden, false);
+  assert.equal(bell.getAttribute('aria-pressed'), 'false');
+  bell.click(); await p.settle();
+  assert.deepEqual(api.calls.filter(c => c[0] === 'savePush'), [['savePush', COACH.id, 'https://web.push.apple.com/coach-1', 'en']]);
+  assert.equal(bell.getAttribute('aria-pressed'), 'true');
+  bell.click(); await p.settle();
+  assert.deepEqual(api.calls.filter(c => c[0] === 'dropPush'), [['dropPush', COACH.id, 'https://web.push.apple.com/coach-1']]);
+  assert.equal(bell.getAttribute('aria-pressed'), 'false');
 });

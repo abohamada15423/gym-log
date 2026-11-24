@@ -420,3 +420,157 @@ dbTest('people delete their own account and everything in it, and only their own
   await as(erin, 'select public.delete_my_account()');
   assert.equal((await db.query('select count(*)::int as n from auth.users')).rows[0].n, others);
 });
+
+// ---- phase 4: comments and notifications (0003_comments_push.sql) ----------------------------
+
+// A browser's subscription, shaped like the real thing (65-byte key, 16-byte secret, base64url).
+const sub = n => ({ endpoint: `https://fcm.googleapis.com/fcm/send/device-${n}-abcdefghij`, p256dh: 'B' + 'A'.repeat(86), auth: 'C'.repeat(22) });
+const addSub = (user, s, lang = 'en') =>
+  as(user, 'insert into public.push_subscriptions (endpoint, p256dh, auth, lang) values ($1, $2, $3, $4)', [s.endpoint, s.p256dh, s.auth, lang]);
+// What the database asked pg_net to send (the stand-in records it), and a clean slate.
+const sentJobs = async () => (await db.query('select body from net.calls order by id')).rows.flatMap(r => r.body.jobs);
+const clearCalls = () => db.query('delete from net.calls');
+
+dbTest('push subscriptions: your own only, real push services only, and one browser can hold two accounts', async () => {
+  const s1 = sub(1);
+  await addSub(alice, s1, 'ar');
+  await addSub(coach, s1);  // the same browser, signed in on the coach page
+  assert.deepEqual((await rows(alice, 'select user_id, lang from public.push_subscriptions')), [{ user_id: alice.id, lang: 'ar' }]);
+  assert.equal((await rows(bob, 'select user_id from public.push_subscriptions')).length, 0);
+  await assert.rejects(as(bob, 'insert into public.push_subscriptions (user_id, endpoint, p256dh, auth) values ($1, $2, $3, $4)',
+    [alice.id, sub(2).endpoint, s1.p256dh, s1.auth]), DENIED);
+  // only the big push services, so the push function never posts anywhere else; keys must look like keys
+  await assert.rejects(addSub(bob, { ...s1, endpoint: 'https://evil.example.com/fcm.googleapis.com/' }), /check constraint/);
+  await assert.rejects(addSub(bob, { ...s1, endpoint: 'http://fcm.googleapis.com/fcm/send/x' }), /check constraint/);
+  await assert.rejects(addSub(bob, { ...sub(3), p256dh: 'short' }), /check constraint/);
+  // the same browser saving again updates its row (new keys, another language); nobody touches anyone else's
+  await upsert(alice, 'push_subscriptions', { user_id: alice.id, endpoint: s1.endpoint, p256dh: s1.p256dh, auth: s1.auth, lang: 'ar' }, ['user_id', 'endpoint']);
+  assert.equal((await db.query('select count(*)::int as n from public.push_subscriptions')).rows[0].n, 2);
+  assert.equal((await as(bob, 'delete from public.push_subscriptions')).rowCount, 0);
+  assert.equal((await as(bob, "update public.push_subscriptions set lang = 'en'")).rowCount, 0);
+});
+
+dbTest('push subscriptions: at most 20 browsers per account', async () => {
+  for (let i = 0; i < 20; i++) await addSub(bob, sub('bob' + i));
+  await assert.rejects(addSub(bob, sub('bob20')), /too many browsers/);
+  // one of the twenty saving again still works
+  await upsert(bob, 'push_subscriptions', { user_id: bob.id, endpoint: sub('bob3').endpoint, p256dh: sub(0).p256dh, auth: sub(0).auth, lang: 'ar' }, ['user_id', 'endpoint']);
+  assert.equal((await as(bob, 'delete from public.push_subscriptions')).rowCount, 20);
+});
+
+dbTest("a new comment goes to the other side of the thread, in each browser's language", async () => {
+  await clearCalls();
+  // until the push function's address and secret are set, nothing is sent and comments work as before
+  await as(alice, "insert into public.comments (client_id, body) values ($1, 'Is my squat depth OK?')", [alice.id]);
+  assert.equal((await db.query('select count(*)::int as n from net.calls')).rows[0].n, 0);
+  await db.query("insert into vault.secrets (name, secret) values ('push_url', 'https://example.supabase.co/functions/v1/push'), ('push_secret', 's3cret')");
+
+  await as(alice, "insert into public.comments (client_id, target_type, target_ref, body) values ($1, 'food_day', '2026-11-24', 'Ate out tonight')", [alice.id]);
+  const call = (await db.query('select url, headers from net.calls')).rows;
+  assert.deepEqual(call.map(c => [c.url, c.headers['x-push-secret']]), [['https://example.supabase.co/functions/v1/push', 's3cret']]);
+  let jobs = await sentJobs();
+  // Alice's coach hears about it, not Alice; it opens her comments on the coach page
+  assert.deepEqual(jobs.map(j => [j.user, j.lang, j.title, j.body, j.url, j.tag]),
+    [[coach.id, 'en', 'Alice A.', 'Ate out tonight', `coach.html#client=${alice.id}&tab=comments`, `comments-${alice.id}`]]);
+  assert.deepEqual([jobs[0].endpoint, jobs[0].p256dh, jobs[0].auth], [sub(1).endpoint, sub(1).p256dh, sub(1).auth]);
+
+  // the coach answers: Alice's browser gets it in Arabic, and it opens her comments in the app
+  await clearCalls();
+  await as(coach, "insert into public.comments (client_id, body) values ($1, 'Fine, back on plan tomorrow')", [alice.id]);
+  jobs = await sentJobs();
+  assert.deepEqual(jobs.map(j => [j.user, j.lang, j.title, j.url]), [[alice.id, 'ar', 'الكابتن Coach Karim', './#comments']]);
+  // no one to tell (Bob has no coach): no request at all
+  await clearCalls();
+  await as(bob, "insert into public.comments (client_id, body) values ($1, 'Note to self')", [bob.id]);
+  assert.equal((await db.query('select count(*)::int as n from net.calls')).rows[0].n, 0);
+});
+
+dbTest('read receipts for chosen comments, and the coach inbox: unread, and waiting for a reply', async () => {
+  let inbox = await rows(coach, 'select client_id, unread, waiting from public.comment_inbox()');
+  assert.deepEqual(inbox, [{ client_id: alice.id, unread: 2, waiting: false }]);
+  const q = uuid();
+  await as(alice, "insert into public.comments (id, client_id, target_type, target_ref, body) values ($1, $2, 'session', $3, 'Too heavy?')", [q, alice.id, uuid()]);
+  inbox = await rows(coach, 'select unread, waiting from public.comment_inbox()');
+  assert.deepEqual(inbox, [{ unread: 3, waiting: true }]);
+  // the coach opens that one workout: only its comment is marked read
+  assert.equal((await rows(coach, 'select public.mark_comments_read($1, $2) as n', [alice.id, [q]]))[0].n, 1);
+  assert.equal((await rows(coach, 'select unread from public.comment_inbox()'))[0].unread, 2);
+  // Alice can't mark her own words as read by the coach, and a client's inbox is empty
+  assert.equal((await rows(alice, 'select public.mark_comments_read($1, $2) as n', [alice.id, [q]]))[0].n, 0);
+  assert.equal((await rows(alice, 'select * from public.comment_inbox()')).length, 0);
+  // a deleted comment doesn't count: the coach's reply is the last word again
+  await as(alice, 'update public.comments set deleted_at = now() where id = $1', [q]);
+  assert.deepEqual(await rows(coach, 'select unread, waiting from public.comment_inbox()'), [{ unread: 2, waiting: false }]);
+  await assert.rejects(as('anon', 'select * from public.comment_inbox()'), /permission denied/);
+});
+
+dbTest('a program or meal plan from the coach is announced once, and only when it changed', async () => {
+  await clearCalls();
+  const p = uuid(), day = { id: 'a', name: 'Day A', ex: [] };
+  await upsert(coach, 'programs', { id: p, coach_id: coach.id, client_id: alice.id, name: 'Strength 2', days: [day], modified_at: ago(10) });
+  let jobs = await sentJobs();
+  assert.deepEqual(jobs.map(j => [j.user, j.title, j.body, j.url]), [[alice.id, 'برنامج جديد من الكابتن', 'Strength 2', './']]);
+  // sent again with nothing new: nothing to say. A real change: "updated"
+  await clearCalls();
+  await upsert(coach, 'programs', { id: p, coach_id: coach.id, client_id: alice.id, name: 'Strength 2', days: [day], modified_at: ago(9) });
+  assert.equal((await sentJobs()).length, 0);
+  await upsert(coach, 'programs', { id: p, coach_id: coach.id, client_id: alice.id, name: 'Strength 2', days: [{ ...day, ex: [['Squat', 3, '5', 'Quads', 180]] }], modified_at: ago(8) });
+  assert.deepEqual((await sentJobs()).map(j => j.title), ['الكابتن حدّث برنامجك']);
+  // retiring it, or writing a template, tells nobody
+  await clearCalls();
+  await as(coach, 'update public.programs set active = false, modified_at = now() where id = $1', [p]);
+  await upsert(coach, 'programs', { id: uuid(), coach_id: coach.id, client_id: null, name: 'Template: 5x5', days: [day] });
+  assert.equal((await sentJobs()).length, 0);
+  // meal plans the same way; they open the Meals tab
+  await upsert(coach, 'meal_plans', { id: uuid(), coach_id: coach.id, client_id: alice.id, name: 'Lean bulk', targets: { kcal: 2800, protein: 170 } });
+  assert.deepEqual((await sentJobs()).map(j => [j.title, j.body, j.url]), [['نظام أكل جديد من الكابتن', 'Lean bulk', './#meals']]);
+});
+
+dbTest('training-day reminders: on the chosen days and time, once a day, never after a workout', async () => {
+  await clearCalls();
+  const setting = value => upsert(alice, 'client_settings', { client_id: alice.id, key: 'reminder', value, modified_at: new Date().toISOString() }, ['client_id', 'key']);
+  const run = async t => (await db.query('select private.send_reminders($1) as n', [t])).rows[0].n;
+  // Tuesdays and Thursdays at 18:30 in Cairo (UTC+2 in November). 24 Nov 2026 is a Tuesday.
+  await setting({ on: true, days: [2, 4], time: '18:30', tz: 'Africa/Cairo', next: 'Push' });
+  assert.equal(await run('2026-11-24T18:15:00+02:00'), 0, 'not yet');
+  assert.equal(await run('2026-11-24T18:40:00+02:00'), 1, 'its time');
+  assert.deepEqual((await sentJobs()).map(j => [j.user, j.title, j.body, j.url, j.tag]),
+    [[alice.id, 'النهارده يوم تمرين', 'عليك النهارده: Push. دوس عشان تبدأ.', './', 'reminder']]);
+  assert.equal(await run('2026-11-24T18:55:00+02:00'), 0, 'once a day');
+  assert.equal(await run('2026-11-25T18:40:00+02:00'), 0, 'Wednesday is not a chosen day');
+  assert.equal(await run('2026-12-01T20:45:00+02:00'), 0, 'more than two hours late');
+  // Thursday, but she already trained today
+  await upsert(alice, 'workout_sessions', { id: uuid(), client_id: alice.id, date: '2026-11-26', sets: {} });
+  assert.equal(await run('2026-11-26T18:45:00+02:00'), 0, 'trained already');
+  // a time zone the database doesn't know is skipped without breaking anyone else's; switched off is off
+  await setting({ on: true, days: [0, 1, 2, 3, 4, 5, 6], time: '18:30', tz: 'Mars/Olympus' });
+  assert.equal(await run('2026-12-03T18:45:00+02:00'), 0);
+  await setting({ on: false, days: [0, 1, 2, 3, 4, 5, 6], time: '18:30', tz: 'Africa/Cairo' });
+  assert.equal(await run('2026-12-03T18:45:00+02:00'), 0);
+  // no "next" day known: a general line
+  await setting({ on: true, days: [4], time: '18:30', tz: 'Africa/Cairo' });
+  await clearCalls();
+  assert.equal(await run('2026-12-03T18:45:00+02:00'), 1);
+  assert.deepEqual((await sentJobs()).map(j => j.body), ['تمرينك مستنيك. دوس عشان تبدأ.']);
+});
+
+dbTest('the notification helpers are for the database alone, and reminders run every 15 minutes', async () => {
+  await assert.rejects(as(alice, 'select private.send_reminders()'), /permission denied/);
+  await assert.rejects(as(alice, "select private.push('[]'::jsonb)"), /permission denied/);
+  await assert.rejects(as(alice, 'select private.comment_jobs($1)', [uuid()]), /permission denied/);
+  await assert.rejects(as(alice, 'select * from private.reminders_sent'), /permission denied/);
+  await assert.rejects(as('anon', 'select * from public.push_subscriptions'), /permission denied/);
+  // the push function's role may find and forget subscriptions, and nothing more
+  const sr = await db.query(`select has_table_privilege('service_role', 'public.push_subscriptions', 'select') as s,
+    has_table_privilege('service_role', 'public.push_subscriptions', 'delete') as d,
+    has_table_privilege('service_role', 'public.push_subscriptions', 'insert') as i`);
+  assert.deepEqual(sr.rows[0], { s: true, d: true, i: false });
+  const job = await db.query("select schedule, command from cron.job where jobname = 'gymlog-reminders'");
+  assert.deepEqual(job.rows, [{ schedule: '*/15 * * * *', command: 'select private.send_reminders()' }]);
+  // deleting an account takes its subscriptions with it, and only its own
+  await addSub(coach2, sub(1));
+  const subsOf = async id => (await db.query('select count(*)::int as n from public.push_subscriptions where user_id = $1', [id])).rows[0].n;
+  assert.deepEqual([await subsOf(coach2.id), await subsOf(coach.id)], [1, 1]);
+  await db.query('delete from auth.users where id = $1', [coach2.id]);
+  assert.deepEqual([await subsOf(coach2.id), await subsOf(coach.id)], [0, 1]);
+});

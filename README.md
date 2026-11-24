@@ -45,7 +45,9 @@ Tap the round button at the top right, or **Sign in or create account** on the P
 - Changes from your other phones arrive when the app opens, comes back to the front, or every few minutes. If the same thing was edited in two places, the newest edit wins.
 - The first sign-in on a phone that already has data asks whether to add it to the account or keep it on the phone only.
 - **Join your coach** with the 12-character code they give you, or by opening their invite link (`…/gym-log/?invite=CODE`). Your coach's name shows in the header. A program from your coach becomes your active program, named under the day tabs on Train. Their meal plan sets your daily calories and protein, and its meals show on the Meals tab under **From your coach**. The app tells you when your coach sends or changes either one.
-- Account settings: sync now, leave your coach, export your data, privacy policy ([privacy.html](privacy.html)), sign out (optionally clearing the phone) and delete the account.
+- **Comments with your coach:** tap your coach's name in the header. A lime dot there means something new. Write about anything, or about a workout (in its history), a day of meals (on the Meals tab) or a check-in (on Progress). Comments on those show up under them too. Written offline, a comment waits and goes up with the next sync.
+- **Notifications** (Plan tab → Notifications): your coach's comments, a new or changed program or meal plan, and **training-day reminders** on the days and at the time you choose, unless you've already trained. On iPhone they work once the app is on the Home Screen.
+- Account settings: sync now, comments, leave your coach, export your data, privacy policy ([privacy.html](privacy.html)), sign out (optionally clearing the phone, and stopping notifications on it) and delete the account.
 
 How it works is in [docs/coach-plan.md](docs/coach-plan.md) (section 5) and at the top of `js/sync.js`. The database is in [supabase/](supabase/README.md).
 
@@ -65,6 +67,8 @@ Coaches open **coach.html** (`…/gym-log/coach.html`), or **Open the coach dash
 - **Meal plan:** daily targets (calories, protein, carbs, fat) and meals with their foods, starting blank, from the app's example meals or from a template. Calories and protein replace the client's own goals, and the meals appear on their Meals tab, ready to log with one tap.
 - **Templates:** programs and meal plans with no client, written once and reused for anyone. **Save as template** in any editor, or write one on the Templates page.
 - **Invite a client:** makes a 12-character code and a link (`…/gym-log/?invite=CODE`) that works once for 7 days. Open codes can be withdrawn.
+- **Comments:** each client has a **Comments** tab with the whole thread and a count of new ones, and you can comment under any workout, day of meals or check-in. The roster shows new comments under a client's name, and **Waiting for your reply** under Needs you while the client has the last word. New comments show up within a minute while the page is open.
+- **Notifications:** the **Notifications** button at the top turns them on in this browser: you get one when a client writes to you, and it opens their comments.
 
 Coaches only ever read their clients' data; the database doesn't let them change it. The dashboard signs in separately from the app, so signing in there doesn't sign the app in on the same device.
 
@@ -82,8 +86,10 @@ There is no build step. `index.html` holds the page markup, `css/app.css` the st
 |---|---|
 | `js/data.js` | Built-in programs, exercise library, training systems, food presets |
 | `js/core.js` | App state, the `h()` DOM helper, date and number helpers, toast |
-| `js/config.js` | The Supabase project's address and public key |
-| `js/sync.js` | Accounts and sync: change detection, outbox, upload, download, coach programs. Loads `js/vendor/supabase.js` only when an account is used |
+| `js/config.js` | The Supabase project's address, public key and the public key for notifications (VAPID) |
+| `js/comments.js` | Comments between client and coach, drawn the same way in the app and on the coach page |
+| `js/push.js` | Notifications in this browser: permission, the push subscription, what a tap opens |
+| `js/sync.js` | Accounts and sync: change detection, outbox, upload, download, coach programs, comments, notifications and reminders. Loads `js/vendor/supabase.js` only when an account is used |
 | `js/i18n.js` | Arabic translations and the right-to-left switch |
 | `js/effects.js` | Undo, SVG charts, count-up numbers, confetti |
 | `js/logic.js` | Storage, programs, theme, exercise history, suggestions, warm-ups, habits |
@@ -92,7 +98,7 @@ There is no build step. `index.html` holds the page markup, `css/app.css` the st
 | `js/dialogs.js` | Plate calculator, backup, warm-up, history, day editor, program picker |
 | `js/train.js` · `js/body.js` · `js/meals.js` · `js/plan.js` | One file per tab (`js/muscles.js` holds the muscle map used on Body) |
 | `js/focus.js` | Focus mode: full-screen, one set at a time |
-| `js/account.js` | Sign-in and account screens, the header's sync status and coach, the Plan tab's Account card |
+| `js/account.js` | Sign-in and account screens, the header's sync status and coach, the comments sheet, the Plan tab's Account and Notifications cards |
 | `coach.html` · `js/coach.js` · `css/coach.css` | The coach dashboard. It loads the app's own data, chart and Progress scripts and draws a client's log with them |
 | `js/app.js` | Rendering, tab switching, start-up and service worker registration |
 
@@ -104,8 +110,10 @@ When you add a file to `js/`, add a `<script>` tag for it in `index.html` and it
 
 Run `npm ci`, then `npm test`. The tests exercise the app DOM with jsdom, including date persistence, completion and undo, partial workout saves, input validation, copying previous sets, keyboard cancellation, undoing removals, backup import, editable goals, progress charts, weight suggestions, workout history, food macros and backup reminders. Canvas rendering and visual layout require a browser check.
 
-`tests/coach.test.cjs` runs the coach dashboard against a fake server: the roster groups and numbers, every flag's threshold, a client's tabs (and that nothing is written to the device), private notes, pause and remove, invites, sign-in, and the Arabic version.
+`tests/coach.test.cjs` runs the coach dashboard against a fake server: the roster groups and numbers, every flag's threshold, a client's tabs (and that nothing is written to the device), private notes, pause and remove, invites, sign-in, comments (new counts, the reply flag, read receipts, comments on a workout, a day of meals and a check-in), the notifications button, and the Arabic version.
 
-`tests/sync.test.cjs` runs accounts and sync against a fake server that follows the database's last-write-wins rules: the first upload, a second phone with the same data, offline changes, conflicts in both directions, the pull overlap, settings and habits, refused records, keeping data on the phone, coach programs and meal plans, backups on a signed-in phone, joining a coach, signing out, deleting the account, and the Arabic screens.
+`tests/sync.test.cjs` runs accounts and sync against a fake server that follows the database's last-write-wins rules: the first upload, a second phone with the same data, offline changes, conflicts in both directions, the pull overlap, settings and habits, refused records, keeping data on the phone, coach programs and meal plans, backups on a signed-in phone, joining a coach, signing out, deleting the account, comments (arriving, read receipts, replies about a workout, offline comments, where they show), notifications and reminders, and the Arabic screens.
+
+`tests/push.test.cjs` checks the push function: its encryption against the worked example in RFC 8291 byte for byte, the VAPID signature, that it only answers the database and only posts to push services, and that it forgets browsers that are gone. It also runs `sw.js`: a notification shows in its own language, and a tap opens the right page.
 
 `npm run test:db` checks the database for the coach version: it runs the Supabase migration on a throwaway local PostgreSQL and tests every permission rule. It needs PostgreSQL 14+ installed and skips otherwise. See [supabase/README.md](supabase/README.md) for the project setup.

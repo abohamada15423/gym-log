@@ -205,3 +205,29 @@ a.crow:hover { background: var(--surface-2) }
   .c-editbar { margin: 4px -16px 0; padding-left: 16px; padding-right: 16px }
 }
 @media (max-width: 860px) { .c-sum { grid-template-columns: 1fr } }
+
+/* ---------- comments and notifications (phase 4) ---------- */
+/* the bell: quiet until it's on, then lime like everything live */
+.c-bell { display: inline-flex; align-items: center; gap: 7px; background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--muted);
+  font: 600 .86rem var(--f-body); padding: 6px 12px; cursor: pointer; white-space: nowrap }
+.c-bell svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+.c-bell[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent) }
+.c-bell:disabled { opacity: .6 }
+.c-bell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+/* roster: unread comments under the client's name */
+.c-new { align-self: flex-start; margin-top: 3px; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 700 .76rem/1.3 var(--f-body) }
+/* the Comments tab: how many are new */
+.c-tabn { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-inline-start: 7px; padding: 0 6px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font: 800 .75rem/1 var(--f-body); vertical-align: 2px }
+.c-tabn:empty { display: none }
+/* the thread on its own tab uses the page's height */
+.c-talk { max-width: 780px }
+.c-talk .cm-log { max-height: none; overflow: visible }
+/* under a workout or a check-in, and inside an opened day of meals */
+.c-entry .cm-block { margin-top: 12px; max-width: 640px }
+.c-day > .cm-block { margin: 0; padding: 0 20px 16px; max-width: 680px }
+@media (max-width: 640px) {
+  .c-bell { padding: 7px }
+  .c-bell span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+  .c-day > .cm-block { padding: 0 16px 14px }
+}

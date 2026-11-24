@@ -225,10 +225,21 @@ function renderBody(root) {
     var parts = BODY_METRICS.filter(function (m) { return b[m.k] != null; }).map(function (m) { return m.k === "kg" ? b.kg + " kg" : m.label + " " + b[m.k] + (m.unit === "%" ? "%" : " cm"); });
     var del = h("button", { class: "btn ghost sm", text: "Remove" });
     del.onclick = function () { removeWithUndo("body", b, "Check-in · " + b.date); };
+    var right = h("div", { class: "row-r" }, [h("div", { class: "v", text: parts.join(" · ") }), del]);
     list.appendChild(h("div", { class: "item" }, [
       h("div", {}, [h("div", { text: b.note || "Check-in" }), h("div", { class: "d", text: b.date })]),
-      h("div", { class: "row-r" }, [h("div", { class: "v", text: parts.join(" · ") }), del])
+      right
     ]));
+    // comments on this check-in: shown under it; without any, a small button starts one
+    if (typeof cmHere === "function" && cmHere("checkin", b.id)) {
+      var cms = commentBlock("checkin", b.id, { placeholder: "Tell your coach about this check-in…" }), holder = h("div", { class: "item-cm" }, [cms]);
+      if (cmOn("checkin", b.id).length) list.appendChild(holder);
+      else {
+        var talk = h("button", { class: "btn ghost sm", type: "button", text: "Comment", "aria-label": "Comment on this check-in" });
+        talk.onclick = function () { talk.remove(); right.parentNode.after(holder); cms.write(); };
+        right.insertBefore(talk, del);
+      }
+    }
   });
   root.appendChild(list);
 }

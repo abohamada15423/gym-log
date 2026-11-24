@@ -19,7 +19,14 @@ function paintAccount() {
   if (coach) b.textContent = initials(coach.name) || "C";
   else if (sync.uid) b.textContent = initials(sync.name || sync.email) || "✓";
   else b.innerHTML = ICON_USER;
-  if (cn) { cn.hidden = !coach; cn.textContent = coach ? (coach.name ? "Coach " + coach.name : "Your coach") : ""; }
+  if (cn) {
+    // the coach's name opens the comments; a lime dot says something new is waiting there
+    var unread = coach ? syncUnread() : 0;
+    cn.hidden = !coach;
+    cn.textContent = coach ? (coach.name ? "Coach " + coach.name : "Your coach") : "";
+    cn.classList.toggle("unread", unread > 0);
+    cn.setAttribute("aria-label", unread ? "Comments · " + unread + " new" : "Comments");
+  }
   b.setAttribute("aria-label", sync.uid ? "Account and sync" : "Sign in");
   paintSyncStatus();
 }
@@ -112,6 +119,100 @@ function serverMsg(e) {
   if (isNetLike(e)) return "No connection. Check your internet and try again.";
   if (e && e.auth) return "Sign in again first";
   return String(e && e.message || "Something went wrong. Try again.");
+}
+
+/* ---------- comments with the coach (phase 4) ---------- */
+var cmOpen = null;  // the thread on screen, if any
+function openComments() {
+  if (!sync.uid) { openAccount("signin"); return; }
+  acctOpen = "comments";
+  var box = $("mbox"); box.textContent = "";
+  var close = h("button", { class: "btn ghost sm", type: "button", text: "✕", "aria-label": "Close" });
+  close.onclick = closeModal;
+  box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: appComments.them() }), close]));
+  if (!sync.coach) box.appendChild(h("p", { class: "acct-note", text: "You don't have a coach right now. Your earlier comments stay here." }));
+  cmOpen = commentThread({
+    placeholder: "Write to your coach…", label: "Comment for your coach",
+    empty: "No comments yet. Ask your coach about a workout, your meals or anything else."
+  });
+  if (!sync.coach) cmOpen.querySelector("form").hidden = true;  // nobody to write to
+  box.appendChild(cmOpen);
+  $("modal").setAttribute("aria-label", "Comments");
+  modalOnClose = function () { acctOpen = null; cmOpen = null; $("modal").setAttribute("aria-label", "Workout details"); paintAccount(); if (syncRt.renderLater) syncRender(); };
+  $("modal").hidden = false;
+  cmOpen.toEnd();
+  close.focus({ preventScroll: true });
+}
+// sync.js calls this when the thread changed: redraw it if it's open, and the dot in the header.
+function commentsChanged() { if (cmOpen && cmOpen.isConnected) cmOpen.repaint(); paintAccount(); }
+// Comments under a workout, a day of meals or a check-in: with a coach, or where some were written before.
+function cmHere(type, ref) { return !!sync.uid && !sync.ask && (!!sync.coach || cmOn(type, ref).length > 0); }
+
+/* ---------- notifications and training reminders, on the Plan tab (phase 4) ---------- */
+function onOff(title, sub, on) {
+  var sw = h("span", { class: "sw" + (on ? " on" : "") });
+  return h("button", { class: "qpill" + (on ? " on" : ""), type: "button", "aria-pressed": String(on) }, [h("div", {}, [h("b", { text: title }), h("small", { text: sub })]), sw]);
+}
+// The days someone trained in the last four weeks: a good first guess at their training days.
+function guessDays() {
+  var from = ymdAdd(today(), -28), seen = {};
+  state.sessions.forEach(function (x) { var d = x.date >= from ? ymdParse(x.date) : null; if (d) seen[d.getDay()] = 1; });
+  return Object.keys(seen).map(Number).sort();
+}
+function renderNotifications(root) {
+  if (!sync.uid || sync.ask) return;
+  root.appendChild(h("h2", { text: "Notifications" }));
+  var card = h("div", { class: "card notif-card" });
+  root.appendChild(card);
+  paintNotifications(card);
+}
+function paintNotifications(card) {
+  card.textContent = "";
+  if (!pushSupported()) {
+    card.appendChild(h("p", { class: "acct-note", text: pushNeedsInstall()
+      ? "On iPhone, notifications work once Gym Log is on your Home Screen: tap Share, then Add to Home Screen, and open it from there."
+      : "This browser can't show notifications from Gym Log." }));
+    return;
+  }
+  var on = !!sync.push && Notification.permission === "granted";
+  var main = onOff("Notifications on this phone", sync.coach ? "Comments from your coach, new programs, and training reminders" : "Training reminders, and comments once you have a coach", on);
+  main.onclick = function () {
+    busyBtn(main, true);
+    (on ? syncPushOff() : syncPushOn()).then(function () {
+      toast(on ? "Notifications off on this phone" : "Notifications on ✓", 2600);
+      paintNotifications(card);
+    }).catch(function (e) {
+      busyBtn(main, false);
+      toast(on ? serverMsg(e) : pushMsg(e), 4200);
+      paintNotifications(card);
+    });
+  };
+  card.appendChild(main);
+  if (!on) {
+    if (Notification.permission === "denied") card.appendChild(h("p", { class: "acct-note", text: "Notifications are blocked for Gym Log. Allow them in your browser or phone settings, then turn them on here." }));
+    return;
+  }
+  var r = Object.assign({ on: false, days: [], time: "18:00" }, plainObj(state.reminder) || {});
+  function setReminder(change) {
+    state.reminder = Object.assign({}, r, change);
+    reminderRefresh(); save(); paintNotifications(card);
+  }
+  var rem = onOff("Remind me on training days", "Only on days you haven't trained yet", !!r.on);
+  rem.onclick = function () { setReminder(r.on ? { on: false } : { on: true, days: r.days.length ? r.days : guessDays() }); };
+  card.appendChild(rem);
+  if (!r.on) return;
+  // the week as it's lived here, Saturday first, labelled like the training calendar
+  var days = h("div", { class: "rem-days", role: "group", "aria-label": "Training days" });
+  var short = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"], long = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  [6, 0, 1, 2, 3, 4, 5].forEach(function (d) {
+    var picked = r.days.indexOf(d) > -1, b = h("button", { class: "btn ghost", type: "button", "aria-pressed": String(picked), "aria-label": long[d], text: short[d] });
+    b.onclick = function () { setReminder({ days: picked ? r.days.filter(function (x) { return x !== d; }) : r.days.concat([d]).sort() }); };
+    days.appendChild(b);
+  });
+  var time = h("input", { type: "time", value: r.time, step: "300" });
+  time.onchange = function () { if (/^([01]\d|2[0-3]):[0-5]\d$/.test(time.value)) setReminder({ time: time.value }); else time.value = r.time; };
+  card.appendChild(h("div", { class: "rem-when" }, [days, h("label", { class: "rem-time" }, ["At", time])]));
+  card.appendChild(h("p", { class: "acct-note", text: r.days.length ? "You'll get one reminder at that time on each day you picked, unless you've already trained." : "Pick the days you train." }));
 }
 
 var ACCT_TITLES = {
@@ -338,6 +439,9 @@ var ACCT_VIEWS = {
     if (sync.coach) {
       body.appendChild(h("div", { class: "acct-coach" }, [h("span", { class: "acct-av sm", "aria-hidden": "true", text: initials(sync.coach.name) || "C" }), sync.coach.name ? "Coach " + sync.coach.name : "Your coach"]));
       body.appendChild(h("p", { class: "acct-note", text: "Your coach sees your workouts, meals, check-ins and habits." }));
+      var unread = syncUnread(), talk = h("button", { class: "btn", type: "button", text: unread ? "Comments · " + unread + " new" : "Comments" });
+      talk.onclick = function () { openComments(); };
+      body.appendChild(talk);
       var leave = h("button", { class: "btn ghost", type: "button", text: "Leave coach" });
       leave.onclick = function () {
         if (!confirm("Leave your coach? They won't see your new workouts, meals or check-ins.")) return;
@@ -436,8 +540,9 @@ function acctInvite() {
   openAccount("join", { code: sync.invite });
 }
 function acctStart() {
-  var b = $("acct");
+  var b = $("acct"), cn = $("coach-name");
   if (b) b.onclick = function () { openAccount(sync.uid ? (sync.ask ? "upload" : "account") : "signin"); };
+  if (cn) cn.onclick = function () { openComments(); };
   paintAccount();
   if (syncRt.urlError) toast(syncRt.urlError === "otp_expired" ? "This link has expired. Sign in, or ask for a new link." : "That link didn't work. Try signing in.", 4200);
   if (sync.uid && sync.ask) acctAskUpload(localCounts());

@@ -40,6 +40,10 @@ function renderMeals(root) {
     h("div", {}, [h("span", { text: "Fat " }), mbFmt(Math.round(ft)) + " g"])
   ]));
 
+  // comments on this day's meals: shown up here once there are some, so they're read first
+  var dayCm = typeof cmHere === "function" && cmHere("food_day", foodDate), dayTalk = dayCm ? cmOn("food_day", foodDate).length : 0;
+  if (dayTalk) root.appendChild(h("div", { class: "card cm-card" }, [commentBlock("food_day", foodDate, { placeholder: "Tell your coach about this day's meals…" })]));
+
   if (state.myFoods.length) {
     root.appendChild(h("h2", { text: "My Foods" }));
     var mine = h("div", { class: "fchips" });
@@ -125,4 +129,5 @@ function renderMeals(root) {
     ]));
   });
   root.appendChild(list);
+  if (dayCm && !dayTalk) root.appendChild(h("div", { class: "cm-tail" }, [commentBlock("food_day", foodDate, { cta: "Comment on this day's meals", placeholder: "Tell your coach about this day's meals…" })]));
 }
