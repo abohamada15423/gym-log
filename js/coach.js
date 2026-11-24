@@ -24,8 +24,10 @@ baseState.lang = coachPrefs.lang;
 function save() { }
 
 // C: everything the page knows. phase: loading | signin | notcoach | ready | error.
-var C = { phase: "loading", me: null, clients: [], byId: {}, view: "list", id: null, tab: "summary", client: null, error: null, tallied: false };
-var CLIENT_TABS = [["summary", "Summary"], ["workouts", "Workouts"], ["meals", "Meals"], ["body", "Body"], ["notes", "Notes"]];
+// edit: the program or meal plan being written ({ kind, clientId (null = template), rowId, draft, dirty }).
+// templates: the coach's own programs and meal plans with no client, loaded when first needed.
+var C = { phase: "loading", me: null, clients: [], byId: {}, view: "list", id: null, tab: "summary", client: null, error: null, tallied: false, edit: null, templates: null };
+var CLIENT_TABS = [["summary", "Summary"], ["workouts", "Workouts"], ["meals", "Meals"], ["body", "Body"], ["program", "Program"], ["mealplan", "Meal plan"], ["notes", "Notes"]];
 
 /* ---------- talking to the server ---------- */
 // The coach page has its own sign-in, kept apart from the app's, so signing in here never links the
@@ -65,8 +67,17 @@ var coachApi = window.coachApi || {
     }
   },
   // what the coach has given these clients: the newest active program and meal plan each
-  plans: function (ids) { return coachDb().from("meal_plans").select("client_id,name,targets,modified_at").in("client_id", ids).eq("active", true).is("deleted_at", null).then(must); },
-  programs: function (ids) { return coachDb().from("programs").select("client_id,name,days,modified_at").in("client_id", ids).eq("active", true).is("deleted_at", null).then(must); },
+  plans: function (ids) { return coachDb().from("meal_plans").select("id,client_id,name,targets,meals,modified_at").in("client_id", ids).eq("active", true).is("deleted_at", null).then(must); },
+  programs: function (ids) { return coachDb().from("programs").select("id,client_id,name,days,modified_at").in("client_id", ids).eq("active", true).is("deleted_at", null).then(must); },
+  // what the coach writes: programs and meal plans for a client, or templates (no client)
+  templates: function (table, me) { return coachDb().from(table).select("*").eq("coach_id", me).is("client_id", null).is("deleted_at", null).order("modified_at", { ascending: false }).then(must); },
+  insertRow: function (table, row) { return coachDb().from(table).insert(row).select("id").single().then(must).then(function (r) { return r.id; }); },
+  updateRow: function (table, id, fields) { return coachDb().from(table).update(fields).eq("id", id).then(must); },
+  // a client has one program and one meal plan at a time: switch off the others
+  retire: function (table, me, clientId, keepId) {
+    var q = coachDb().from(table).update({ active: false, modified_at: new Date().toISOString() }).eq("coach_id", me).eq("client_id", clientId).eq("active", true);
+    return (keepId ? q.neq("id", keepId) : q).then(must);
+  },
   note: function (me, id) { return coachDb().from("coach_notes").select("body").eq("coach_id", me).eq("client_id", id).maybeSingle().then(must).then(function (r) { return r ? r.body : ""; }); },
   saveNote: function (me, id, body) { return coachDb().from("coach_notes").upsert({ coach_id: me, client_id: id, body: body }, { onConflict: "coach_id,client_id" }).then(must); },
   setStatus: function (me, id, status) { return coachDb().from("coach_clients").update({ status: status }).eq("coach_id", me).eq("client_id", id).then(must); },
@@ -231,10 +242,11 @@ async function loadClient(id) {
     coachApi.plans([id]), coachApi.programs([id]),
     coachApi.note(C.me.id, id)
   ]);
-  var prog = newest(got[6]);
+  var prog = newest(got[6]), plan = newest(got[5]);
   return {
     id: id, state: toState({ sessions: got[0], food: got[1], body: got[2], habits: got[3], settings: got[4] }),
-    plan: newest(got[5]), program: prog && Array.isArray(prog.days) ? { name: prog.name, days: prog.days } : null, note: got[7] || ""
+    plan: plan, program: prog && Array.isArray(prog.days) ? { name: prog.name, days: prog.days } : null,
+    programRow: prog, planRow: plan, note: got[7] || ""
   };
 }
 
@@ -242,6 +254,7 @@ async function loadClient(id) {
 function route() {
   var q = new URLSearchParams(location.hash.slice(1)), id = q.get("client");
   if (C.phase !== "ready") { render(); return; }
+  if (location.hash === "#templates") { C.view = "templates"; C.id = null; C.client = null; state = baseState; render(); return; }
   if (!id || !C.byId[id]) { openList(); return; }
   var tab = q.get("tab");
   C.tab = CLIENT_TABS.some(function (t) { return t[0] === tab; }) ? tab : "summary";
@@ -263,12 +276,17 @@ function render() {
   $("c-lang").textContent = coachPrefs.lang === "ar" ? "English" : "العربية";
   $("c-lang").setAttribute("lang", coachPrefs.lang === "ar" ? "en" : "ar");
   $("c-out").hidden = !C.me;
+  var nav = $("c-nav");
+  nav.hidden = C.phase !== "ready";
+  nav.querySelectorAll("a").forEach(function (a) { a.setAttribute("aria-current", String(a.getAttribute("data-view") === (C.view === "templates" ? "templates" : "list") && C.phase === "ready" ? "page" : false)); });
+  if (typeof clearAnimLoops === "function") clearAnimLoops();
   document.title = (C.view === "client" && C.byId[C.id] ? C.byId[C.id].name + " | " : "") + trText("Gym Log Coach");
   if (C.phase === "loading") root.appendChild(h("p", { class: "c-quiet", text: "Loading…" }));
   else if (C.phase === "signin") renderSignIn(root);
   else if (C.phase === "notcoach") renderNotCoach(root);
   else if (C.phase === "error") renderError(root);
   else if (C.view === "client") renderClient(root);
+  else if (C.view === "templates") renderTemplates(root);
   else renderRoster(root);
 }
 function renderError(root) {
@@ -421,7 +439,7 @@ function renderClient(root) {
   root.appendChild(body);
   if (!cl) { body.appendChild(h("p", { class: "c-quiet", text: "Loading…" })); return; }
   if (cl.failed) { body.appendChild(h("p", { class: "form-err", text: C.error })); return; }
-  ({ summary: tabSummary, workouts: tabWorkouts, meals: tabMeals, body: tabBody, notes: tabNotes })[C.tab](body, c, cl);
+  ({ summary: tabSummary, workouts: tabWorkouts, meals: tabMeals, body: tabBody, program: tabProgram, mealplan: tabMealPlan, notes: tabNotes })[C.tab](body, c, cl);
 }
 function setStatus(c, status) {
   coachApi.setStatus(C.me.id, c.id, status).then(function () {
@@ -552,6 +570,359 @@ function tabNotes(body, c, cl) {
   area.oninput = function () { clearTimeout(timer); timer = setTimeout(flush, 800); };
   area.onblur = function () { clearTimeout(timer); flush(); };
   body.appendChild(h("section", { class: "c-panel" }, [area, said]));
+}
+
+/* ---------- programs and meal plans: what the coach writes ---------- */
+// A program has the shape of the app's built-in ones (js/data.js): days of [name, sets, reps, muscle, rest].
+function copyDays(days) {
+  return (days || []).map(function (d, i) {
+    return { id: String(d.id || "d" + (i + 1)), tag: "Day " + (i + 1), name: String(d.name || "Day " + (i + 1)).slice(0, 80), ex: (d.ex || []).map(function (e) { return e.slice(0, 5); }) };
+  });
+}
+// a meal plan while it is being written: numbers stay as typed until it is saved
+function planDraft(from) {
+  from = from || {};
+  var t = from.targets || {}, v = function (x) { return x == null ? "" : String(x); };
+  return {
+    name: from.name || "", targets: { kcal: v(t.kcal), protein: v(t.protein), carbs: v(t.carbs), fat: v(t.fat) },
+    meals: (from.meals || []).map(function (m) { return { name: m.name || "", items: (m.items || []).join("\n"), kcal: v(m.kcal), p: v(m.p), c: v(m.c), f: v(m.f) }; })
+  };
+}
+function templatesOf(kind) { return C.templates ? C.templates[kind === "program" ? "programs" : "plans"] : []; }
+function ensureTemplates() {
+  if (C.templates || C.loadingTemplates) return;
+  C.loadingTemplates = true;
+  Promise.all([coachApi.templates("programs", C.me.id), coachApi.templates("meal_plans", C.me.id)]).then(function (r) {
+    C.templates = { programs: r[0] || [], plans: r[1] || [] }; C.loadingTemplates = false; render();
+  }).catch(function (e) { C.loadingTemplates = false; toast(netMsg(e), 3200); });
+}
+// What a client follows right now, judged by their latest workout.
+function theirProgram(cl) {
+  var last = cl.state.sessions[cl.state.sessions.length - 1], pid = last ? last.prog : "split4";
+  if (pid === "coach") return null;
+  if (pid === "custom" && cl.state.custom && Array.isArray(cl.state.custom.days)) return { name: cl.state.custom.name || "My Program", days: cl.state.custom.days };
+  return PROGRAMS.filter(function (x) { return x.id === (pid || "split4"); })[0] || null;
+}
+function startEdit(kind, clientId, row, from) {
+  C.edit = {
+    kind: kind, clientId: clientId, rowId: row ? row.id : null, dirty: false,
+    draft: kind === "program" ? { name: from && from.name || "", days: copyDays(from && from.days && from.days.length ? from.days : [NEW_DAY(1)]) } : planDraft(from)
+  };
+  render();
+  var first = $("view").querySelector(".c-editor input");
+  if (first) first.focus({ preventScroll: true });
+}
+function cancelEdit() {
+  if (C.edit && C.edit.dirty && !confirm("Discard your changes?")) return;
+  C.edit = null; render();
+}
+async function afterSave(clientId) {
+  C.edit = null; C.templates = null;
+  if (clientId && C.id === clientId) {
+    await loadRoster();
+    C.client = await loadClient(clientId); state = C.client.state;
+  }
+  render();
+}
+
+// the start menu: a blank one, what the client follows now, a built-in program, the example meals, or a template
+function startMenu(kind, c, cl, replacing) {
+  var sel = h("select", { "aria-label": "Start from" }), src = { blank: null };
+  var opt = function (parent, value, label) { parent.appendChild(h("option", { value: value, text: label })); };
+  opt(sel, "blank", kind === "program" ? "A blank program" : "A blank meal plan");
+  if (kind === "program") {
+    var theirs = cl && theirProgram(cl);
+    if (theirs) { opt(sel, "theirs", "What they follow now: " + theirs.name); src.theirs = theirs; }
+    var g = h("optgroup", { label: "Built-in programs" });
+    PROGRAMS.forEach(function (p) { opt(g, "p:" + p.id, p.name); src["p:" + p.id] = p; });
+    sel.appendChild(g);
+  } else {
+    opt(sel, "example", "The app's example meals"); src.example = { name: "", targets: {}, meals: MEALS };
+  }
+  var tpls = templatesOf(kind);
+  if (tpls.length) {
+    var tg = h("optgroup", { label: "Your templates" });
+    tpls.forEach(function (t) { opt(tg, "t:" + t.id, t.name); src["t:" + t.id] = t; });
+    sel.appendChild(tg);
+  }
+  var go = h("button", { class: "btn" + (replacing ? " ghost" : ""), type: "button", text: kind === "program" ? "Write the program" : "Write the meal plan" });
+  go.onclick = function () { var from = src[sel.value]; startEdit(kind, c ? c.id : null, null, from ? { name: from.name, days: from.days, targets: from.targets, meals: from.meals } : null); };
+  var title = replacing ? (kind === "program" ? "Send a different program" : "Send a different meal plan") : kind === "program" ? "Write a program" : "Write a meal plan";
+  return h("section", { class: "c-start" }, [h("h3", { class: "acct-h", text: title }), h("div", { class: "c-start-row" }, [h("label", {}, ["Start from", sel]), go])]);
+}
+function editBar(who, onSave) {
+  var send = h("button", { class: "btn", type: "button", text: who ? "Send to " + who : "Save template" });
+  var asTpl = who ? h("button", { class: "btn ghost", type: "button", text: "Save as template" }) : null;
+  var cancel = h("button", { class: "linkbtn", type: "button", text: "Cancel" });
+  function run(btn, asTemplate) {
+    btn.disabled = true; btn.classList.add("busy");
+    onSave(asTemplate).catch(function (e) { toast(netMsg(e), 3400); }).then(function () { btn.disabled = false; btn.classList.remove("busy"); });
+  }
+  send.onclick = function () { run(send, false); };
+  if (asTpl) asTpl.onclick = function () { run(asTpl, true); };
+  cancel.onclick = cancelEdit;
+  return h("div", { class: "c-editbar" }, [send, asTpl, cancel]);
+}
+
+/* ---------- the program editor ---------- */
+// Days are edited with the app's own day editor and exercise library. While it is open, `state` is a
+// small editing copy whose "My Program" is the draft, so the editor changes the draft directly.
+function editDay(id) {
+  var keep = state, E = C.edit;
+  state = Object.assign(fresh(), { lang: coachPrefs.lang, programId: "custom", custom: E.draft, customLib: (coachPrefs.lib || []).slice() });
+  openDayEditor(id);
+  modalOnClose = function () {
+    coachPrefs.lib = state.customLib; savePrefs();  // exercises the coach created stay in their library
+    state = keep; E.dirty = true; render();
+  };
+}
+function programEditor(body, who) {
+  var E = C.edit, P = E.draft;
+  var nameIn = h("input", { type: "text", maxlength: "80", value: P.name, placeholder: "e.g. Strength block" });
+  nameIn.oninput = function () { P.name = nameIn.value; E.dirty = true; };
+  var list = h("div", { class: "c-roster c-editdays" });
+  P.days.forEach(function (d, i) {
+    var ed = h("button", { class: "btn ghost sm", type: "button", text: "Edit day" });
+    ed.onclick = function () { editDay(d.id); };
+    var up = h("button", { class: "btn ghost sm", type: "button", text: "▲", "aria-label": "Move up" });
+    up.disabled = i === 0;
+    up.onclick = function () { P.days.splice(i - 1, 0, P.days.splice(i, 1)[0]); E.dirty = true; render(); };
+    var rm = h("button", { class: "btn ghost sm", type: "button", text: "Remove" });
+    rm.onclick = function () {
+      if (P.days.length < 2) { toast("Keep at least one day"); return; }
+      if (d.ex.length && !confirm("Remove " + d.name + " and its exercises?")) return;
+      P.days.splice(i, 1); E.dirty = true; render();
+    };
+    list.appendChild(h("div", { class: "c-editday" }, [
+      h("div", { class: "c-when" }, [h("b", { text: d.name }), h("small", { text: d.ex.length === 1 ? "1 exercise" : d.ex.length + " exercises" })]),
+      d.ex.length ? h("p", { class: "c-exlist", translate: "no", text: d.ex.map(function (e) { return e[0]; }).join(", ") }) : h("p", { class: "c-quiet c-small", text: "No exercises yet." }),
+      h("div", { class: "c-actions" }, [ed, up, rm])
+    ]));
+  });
+  var add = h("button", { class: "btn ghost", type: "button", text: "＋ Add a training day" });
+  add.onclick = function () { var nd = NEW_DAY(P.days.length + 1); P.days.push(nd); E.dirty = true; editDay(nd.id); };
+  body.appendChild(h("section", { class: "c-panel c-editor" }, [
+    h("h2", { class: "c-h2 c-flat", text: who ? (E.rowId ? "Edit their program" : "New program") : (E.rowId ? "Edit the template" : "New program template") }),
+    h("label", {}, ["Program name", nameIn]),
+    list, add,
+    editBar(who, saveProgram)
+  ]));
+}
+async function saveProgram(asTemplate) {
+  var E = C.edit, name = E.draft.name.trim(), days = copyDays(E.draft.days);
+  if (!name) { toast("Name the program first", 2600); return; }
+  if (!days.some(function (d) { return d.ex.length; })) { toast("Add at least one exercise", 2600); return; }
+  var row = { name: name, days: days, modified_at: new Date().toISOString() };
+  if (asTemplate) {
+    await coachApi.insertRow("programs", Object.assign({ coach_id: C.me.id, client_id: null, active: true }, row));
+    C.templates = null; toast("Saved as a template");
+    return;
+  }
+  if (E.rowId) await coachApi.updateRow("programs", E.rowId, row);
+  else E.rowId = await coachApi.insertRow("programs", Object.assign({ coach_id: C.me.id, client_id: E.clientId, active: true }, row));
+  if (E.clientId) await coachApi.retire("programs", C.me.id, E.clientId, E.rowId);
+  var c = E.clientId && C.byId[E.clientId];
+  toast(c ? "Sent to " + c.name : "Template saved", 2600);
+  await afterSave(E.clientId);
+}
+function daysView(days) {
+  return h("div", { class: "c-days" }, (days || []).map(function (d) {
+    return h("section", { class: "c-dayview" }, [
+      h("h3", { text: d.name }),
+      d.ex && d.ex.length ? h("ul", { class: "c-sets" }, d.ex.map(function (e) {
+        return h("li", {}, [h("span", {}, [h("b", { class: "c-exname", text: e[0] }), h("span", { class: "c-setnums", translate: "no", text: e[1] + " × " + e[2] })])]);
+      })) : h("p", { class: "c-quiet c-small", text: "No exercises yet." })
+    ]);
+  }));
+}
+function tabProgram(body, c, cl) {
+  if (C.edit && C.edit.kind === "program" && C.edit.clientId === c.id) { programEditor(body, c.name); return; }
+  ensureTemplates();
+  var cur = cl.programRow;
+  if (cur) {
+    var edit = h("button", { class: "btn", type: "button", text: "Edit program" });
+    edit.onclick = function () { startEdit("program", c.id, cur, cur); };
+    var stop = h("button", { class: "btn ghost", type: "button", text: "Stop this program" });
+    stop.onclick = function () {
+      if (!confirm("Stop " + cur.name + " for " + c.name + "? They go back to their own program.")) return;
+      coachApi.updateRow("programs", cur.id, { active: false, modified_at: new Date().toISOString() })
+        .then(function () { toast("Program stopped"); return afterSave(c.id); }).catch(function (e) { toast(netMsg(e), 3200); });
+    };
+    body.appendChild(h("section", { class: "c-panel" }, [
+      h("div", { class: "c-panel-head" }, [
+        h("div", {}, [h("h2", { class: "c-h2 c-flat", text: cur.name, translate: "no" }), h("small", { class: "c-quiet", text: "Sent " + longDate(cur.modified_at) })]),
+        h("div", { class: "c-actions" }, [edit, stop])
+      ]),
+      daysView(cur.days)
+    ]));
+  } else {
+    var theirs = theirProgram(cl);
+    body.appendChild(h("p", { class: "c-quiet", text: theirs ? "No program from you yet. They follow " + theirs.name + " in the app." : "No program from you yet." }));
+  }
+  body.appendChild(startMenu("program", c, cl, !!cur));
+}
+
+/* ---------- the meal plan editor ---------- */
+var TARGET_FIELDS = [["kcal", "Calories a day", "kcal", 800, 8000], ["protein", "Protein", "g", 20, 500], ["carbs", "Carbs", "g", 0, 1500], ["fat", "Fat", "g", 0, 500]];
+function planEditor(body, who) {
+  var E = C.edit, P = E.draft, touch = function () { E.dirty = true; };
+  var nameIn = h("input", { type: "text", maxlength: "80", value: P.name, placeholder: "e.g. Lean bulk" });
+  nameIn.oninput = function () { P.name = nameIn.value; touch(); };
+  var targets = h("div", { class: "c-fields4" }, TARGET_FIELDS.map(function (f) {
+    var inp = h("input", { type: "text", inputmode: "numeric", value: P.targets[f[0]], placeholder: "–" });
+    inp.oninput = function () { P.targets[f[0]] = inp.value; touch(); };
+    return h("label", {}, [f[1] + " (" + f[2] + ")", inp]);
+  }));
+  var meals = h("div", { class: "c-meals" });
+  P.meals.forEach(function (m, i) {
+    var name = h("input", { type: "text", maxlength: "80", value: m.name, placeholder: "e.g. Breakfast" });
+    name.oninput = function () { m.name = name.value; touch(); };
+    var nums = h("div", { class: "c-fields4" }, [["kcal", "Calories"], ["p", "Protein (g)"], ["c", "Carbs (g)"], ["f", "Fat (g)"]].map(function (f) {
+      var inp = h("input", { type: "text", inputmode: "decimal", value: m[f[0]], placeholder: "–" });
+      inp.oninput = function () { m[f[0]] = inp.value; touch(); };
+      return h("label", {}, [f[1], inp]);
+    }));
+    var items = h("textarea", { rows: "3", placeholder: "One food per line, e.g. 3 eggs" });
+    items.value = m.items;
+    items.oninput = function () { m.items = items.value; touch(); };
+    var up = h("button", { class: "btn ghost sm", type: "button", text: "▲", "aria-label": "Move up" });
+    up.disabled = i === 0;
+    up.onclick = function () { P.meals.splice(i - 1, 0, P.meals.splice(i, 1)[0]); touch(); render(); };
+    var rm = h("button", { class: "btn ghost sm", type: "button", text: "Remove" });
+    rm.onclick = function () { P.meals.splice(i, 1); touch(); render(); };
+    meals.appendChild(h("section", { class: "c-meal" }, [
+      h("div", { class: "c-meal-top" }, [h("label", {}, ["Meal", name]), h("div", { class: "c-actions" }, [up, rm])]),
+      nums, h("label", {}, ["What's in it", items])
+    ]));
+  });
+  var add = h("button", { class: "btn ghost", type: "button", text: "＋ Add a meal" });
+  add.onclick = function () { P.meals.push({ name: "", items: "", kcal: "", p: "", c: "", f: "" }); touch(); render(); };
+  body.appendChild(h("section", { class: "c-panel c-editor" }, [
+    h("h2", { class: "c-h2 c-flat", text: who ? (E.rowId ? "Edit their meal plan" : "New meal plan") : (E.rowId ? "Edit the template" : "New meal plan template") }),
+    h("label", {}, ["Meal plan name", nameIn]),
+    h("h3", { class: "acct-h", text: "Daily targets" }),
+    h("p", { class: "c-quiet c-small", text: "Calories and protein replace the client's own goals in the app." }),
+    targets,
+    h("h3", { class: "acct-h", text: "Meals" }),
+    P.meals.length ? null : h("p", { class: "c-quiet c-small", text: "Meals show up in the client's Meals tab, ready to log with one tap." }),
+    meals, add,
+    editBar(who, savePlan)
+  ]));
+}
+// The draft as a row, or the first thing that's wrong with it.
+function planRow(P) {
+  var num0 = function (v) { v = String(v).trim(); return v === "" ? null : num(v); };
+  var out = { name: P.name.trim().slice(0, 80), targets: {}, meals: [] };
+  if (!out.name) return { error: "Name the meal plan first" };
+  for (var i = 0; i < TARGET_FIELDS.length; i++) {
+    var f = TARGET_FIELDS[i], v = num0(P.targets[f[0]]);
+    if (v === null) continue;
+    if (!(v >= f[3] && v <= f[4])) return { error: f[1] + " must be " + f[3] + "–" + f[4] + " " + f[2] };
+    out.targets[f[0]] = Math.round(v);
+  }
+  for (var j = 0; j < P.meals.length; j++) {
+    var m = P.meals[j], name = m.name.trim();
+    if (!name) return { error: "Name every meal" };
+    var meal = { name: name.slice(0, 80), items: m.items.split("\n").map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 20), kcal: Math.round(num0(m.kcal) || 0), p: num0(m.p) || 0 };
+    if (num0(m.c) !== null) meal.c = num0(m.c);
+    if (num0(m.f) !== null) meal.f = num0(m.f);
+    if ([meal.kcal, meal.p, meal.c || 0, meal.f || 0].some(function (x) { return !(x >= 0 && x < 20000); })) return { error: "Check the numbers for " + meal.name };
+    out.meals.push(meal);
+  }
+  if (!Object.keys(out.targets).length && !out.meals.length) return { error: "Add a target or a meal" };
+  return out;
+}
+async function savePlan(asTemplate) {
+  var E = C.edit, r = planRow(E.draft);
+  if (r.error) { toast(r.error, 3000); return; }
+  var row = { name: r.name, targets: r.targets, meals: r.meals, modified_at: new Date().toISOString() };
+  if (asTemplate) {
+    await coachApi.insertRow("meal_plans", Object.assign({ coach_id: C.me.id, client_id: null, active: true }, row));
+    C.templates = null; toast("Saved as a template");
+    return;
+  }
+  if (E.rowId) await coachApi.updateRow("meal_plans", E.rowId, row);
+  else E.rowId = await coachApi.insertRow("meal_plans", Object.assign({ coach_id: C.me.id, client_id: E.clientId, active: true }, row));
+  if (E.clientId) await coachApi.retire("meal_plans", C.me.id, E.clientId, E.rowId);
+  var c = E.clientId && C.byId[E.clientId];
+  toast(c ? "Sent to " + c.name : "Template saved", 2600);
+  await afterSave(E.clientId);
+}
+function targetsLine(t) {
+  var bits = [];
+  if (t.kcal) bits.push(t.kcal.toLocaleString() + " kcal");
+  if (t.protein) bits.push(t.protein + " g protein");
+  if (t.carbs != null && t.carbs !== "") bits.push(t.carbs + " g carbs");
+  if (t.fat != null && t.fat !== "") bits.push(t.fat + " g fat");
+  return h("p", { class: "c-chips" }, bits.map(function (b) { return h("span", { text: b }); }));
+}
+function mealsView(meals) {
+  return h("div", { class: "c-days" }, (meals || []).map(function (m) {
+    return h("section", { class: "c-dayview" }, [
+      h("h3", { text: m.name, translate: "no" }),
+      h("p", { class: "c-quiet c-small", text: Math.round(m.kcal || 0) + " kcal, " + mbFmt(m.p || 0) + " g protein" }),
+      m.items && m.items.length ? h("ul", { class: "c-items" }, m.items.map(function (x) { return h("li", { text: x, translate: "no" }); })) : null
+    ]);
+  }));
+}
+function tabMealPlan(body, c, cl) {
+  if (C.edit && C.edit.kind === "plan" && C.edit.clientId === c.id) { planEditor(body, c.name); return; }
+  ensureTemplates();
+  var cur = cl.planRow;
+  if (cur) {
+    var edit = h("button", { class: "btn", type: "button", text: "Edit meal plan" });
+    edit.onclick = function () { startEdit("plan", c.id, cur, cur); };
+    var stop = h("button", { class: "btn ghost", type: "button", text: "Stop this meal plan" });
+    stop.onclick = function () {
+      if (!confirm("Stop " + cur.name + " for " + c.name + "? Their own targets apply again.")) return;
+      coachApi.updateRow("meal_plans", cur.id, { active: false, modified_at: new Date().toISOString() })
+        .then(function () { toast("Meal plan stopped"); return afterSave(c.id); }).catch(function (e) { toast(netMsg(e), 3200); });
+    };
+    body.appendChild(h("section", { class: "c-panel" }, [
+      h("div", { class: "c-panel-head" }, [
+        h("div", {}, [h("h2", { class: "c-h2 c-flat", text: cur.name, translate: "no" }), h("small", { class: "c-quiet", text: "Sent " + longDate(cur.modified_at) })]),
+        h("div", { class: "c-actions" }, [edit, stop])
+      ]),
+      targetsLine(cur.targets || {}),
+      mealsView(cur.meals)
+    ]));
+  } else body.appendChild(h("p", { class: "c-quiet", text: "No meal plan from you yet. The app uses their own goals." }));
+  body.appendChild(startMenu("plan", c, cl, !!cur));
+}
+
+/* ---------- templates ---------- */
+function renderTemplates(root) {
+  root.appendChild(h("div", { class: "c-head" }, [h("div", {}, [
+    h("h1", { class: "c-h1", text: "Templates" }),
+    h("p", { class: "c-lead", text: "Write a program or meal plan once, then start from it on any client's page." })
+  ])]));
+  if (C.edit && C.edit.clientId === null) { (C.edit.kind === "program" ? programEditor : planEditor)(root, null); return; }
+  if (!C.templates) { root.appendChild(h("p", { class: "c-quiet", text: "Loading…" })); ensureTemplates(); return; }
+  [["program", "Programs", "programs"], ["plan", "Meal plans", "meal_plans"]].forEach(function (k) {
+    var list = templatesOf(k[0]);
+    root.appendChild(h("h2", { class: "c-h2" }, [k[1], h("span", { class: "c-count", text: String(list.length) })]));
+    var panel = h("div", { class: "c-roster c-log" });
+    list.forEach(function (t) {
+      var ed = h("button", { class: "btn ghost sm", type: "button", text: "Edit" });
+      ed.onclick = function () { startEdit(k[0], null, t, t); };
+      var del = h("button", { class: "btn ghost sm c-danger", type: "button", text: "Delete" });
+      del.onclick = function () {
+        if (!confirm("Delete the template " + t.name + "? What you already sent to clients stays.")) return;
+        var now = new Date().toISOString();
+        coachApi.updateRow(k[2], t.id, { deleted_at: now, active: false, modified_at: now })
+          .then(function () { toast("Template deleted"); C.templates = null; render(); }).catch(function (e) { toast(netMsg(e), 3200); });
+      };
+      var what = k[0] === "program" ? ((t.days || []).length === 1 ? "1 day" : (t.days || []).length + " days")
+        : ((t.meals || []).length === 1 ? "1 meal" : (t.meals || []).length + " meals");
+      panel.appendChild(h("article", { class: "c-entry c-tplrow" }, [
+        h("div", { class: "c-when" }, [h("b", { text: t.name, translate: "no" }), h("small", { text: what })]),
+        h("div", { class: "c-actions" }, [ed, del])
+      ]));
+    });
+    if (!list.length) panel.appendChild(h("p", { class: "c-entry c-quiet", text: k[0] === "program" ? "No program templates yet." : "No meal plan templates yet." }));
+    root.appendChild(panel);
+    root.appendChild(startMenu(k[0], null, null, false));
+  });
 }
 
 /* ---------- invites ---------- */

@@ -2581,3 +2581,16 @@ label { font: 600 .8rem var(--f-body); color: var(--muted) }
 .acct-pitch b { display: block; font-size: 1.02rem; margin-bottom: 2px }
 .acct-pitch p { margin: 0; color: var(--muted); font-size: .92rem }
 @media (prefers-reduced-motion: reduce) { .btn.busy::after { animation-duration: 2s } }
+
+/* ---------- what the coach sends (phase 3) ---------- */
+/* Train tab: whose program this is */
+.coach-prog { margin: -2px 2px 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; color: var(--muted); font-size: .88rem }
+.coach-prog b { color: var(--ink); font-weight: 700 }
+/* Meals tab: the coach's meals, one tap to log */
+.coach-meals { display: flex; flex-direction: column; gap: 2px; padding-top: 12px }
+.coach-plan-name { color: var(--muted); font-weight: 600; margin-bottom: 4px }
+.coach-meal { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line) }
+.coach-meal > div { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.coach-meal small { color: var(--muted) }
+.coach-meal ul { margin: 6px 0 0; padding-inline-start: 18px; font-size: .9rem; color: var(--ink); display: flex; flex-direction: column; gap: 2px }
+.coach-meal .btn { flex: none }

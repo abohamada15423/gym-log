@@ -421,6 +421,47 @@ test('a coach account gets a link to the coach dashboard instead of a join form'
   assert.equal(a.doc.querySelector('#mbox input.code-in'), null);
 });
 
+test("the coach's program shows on the Train tab and their meals on Meals; changes are announced", async t => {
+  const server = fakeServer(), a = app(t, server, { saved: { sessions: [], custom: { name: 'My Program', days: [{ id: 'm1', tag: 'Day 1', name: 'Mine', ex: [['Squat', 3, '5', 'Quads · Glutes', 150]] }] }, programId: 'custom' } });
+  await a.signIn();
+  server.links.push({ coach_id: COACH, client_id: ME.id, status: 'active' });
+  server.profiles.set(COACH, { id: COACH, full_name: 'Ahmed Hassan', role: 'coach' });
+  const prog = { id: '88888888-8888-4888-8888-888888888888', coach_id: COACH, client_id: ME.id, name: 'Strength block', active: true, deleted_at: null, modified_at: iso(Date.now() - 2000),
+    days: [{ id: 'a', name: 'Heavy legs', ex: [['Squat', 5, '5']] }] };
+  server.write('programs', prog);
+  server.write('meal_plans', { id: '99999999-9999-4999-8999-999999999999', coach_id: COACH, client_id: ME.id, name: 'Cut', active: true, deleted_at: null, modified_at: iso(Date.now() - 2000),
+    targets: { kcal: 2100, protein: 180 }, meals: [{ name: 'Breakfast', items: ['4 eggs', 'Oats'], kcal: 600, p: 40 }] });
+  await a.w.syncNow({ pull: true }); await a.settle();
+  assert.match(a.doc.getElementById('toast').textContent, /New program from your coach: Strength block · New meal plan from your coach: Cut/);
+  a.doc.getElementById('t-train').click();
+  assert.match(a.doc.querySelector('.coach-prog').textContent, /Program from Coach Ahmed Hassan.*Strength block/);
+  a.doc.getElementById('t-meals').click();
+  const meals = a.doc.querySelector('.coach-meals');
+  assert.match(meals.textContent, /Cut.*Breakfast.*600 kcal.*4 eggs.*Oats/);
+  assert.ok(!a.button('+ Breakfast (52g P)'), "the app's own meal presets make way");
+  meals.querySelector('button').click();
+  const logged = a.local().food.at(-1);
+  assert.deepEqual([logged.name, logged.kcal, logged.p], ['Breakfast', 600, 40]);
+  assert.match(a.doc.querySelector('.rings').textContent, /of 2100.*of 180/);
+
+  // in Arabic too
+  a.w.state.lang = 'ar'; a.w.applyLang(); a.w.render(); await a.tick();
+  assert.doesNotMatch(a.doc.querySelector('.coach-meals').textContent.replace(/Cut|Breakfast|4 eggs|Oats/g, ''), /[A-Za-z]{3}/);
+  a.doc.getElementById('t-train').click(); await a.tick();
+  assert.match(a.doc.querySelector('.coach-prog').textContent, /برنامج من الكابتن Ahmed Hassan/);
+  a.w.state.lang = 'en'; a.w.applyLang(); a.w.render(); await a.tick();
+  // the coach edits the same program: announced, and the days change
+  server.write('programs', { ...server.rows('programs')[0], days: [{ id: 'a', name: 'Heavy legs', ex: [['Squat', 5, '3']] }], modified_at: iso(Date.now() - 1000) });
+  await a.w.syncNow({ pull: true }); await a.settle();
+  assert.equal(a.doc.getElementById('toast').textContent, 'Your coach updated your program');
+  assert.equal(a.w.DAYS[0].ex[0][2], '3');
+  // the coach stops it: back to the client's own program
+  server.write('programs', { ...server.rows('programs')[0], active: false, modified_at: iso(Date.now()) });
+  await a.w.syncNow({ pull: true }); await a.settle();
+  assert.equal(a.local().programId, 'custom');
+  assert.equal(a.w.DAYS[0].name, 'Mine');
+});
+
 test('the bundled Supabase library is the version package.json pins', () => {
   const pin = require('../package.json').devDependencies['@supabase/supabase-js'];
   const head = fs.readFileSync('js/vendor/supabase.js', 'utf8').slice(0, 200);

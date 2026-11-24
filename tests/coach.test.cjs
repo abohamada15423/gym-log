@@ -37,7 +37,7 @@ function fixture() {
     body_checkins: [b(SARA, 33, 75.4, { waist: 82 }), b(SARA, 19, 74.1), b(SARA, 5, 72.9, { waist: 79.5 }), b(OMAR, 20, 68.4), b(MONA, 24, 63.6), b(MONA, 16, 63.4), b(MONA, 2, 64.5)],
     habit_days: [{ client_id: SARA, date: day(0), data: { creatine: true } }],
     client_settings: [{ client_id: SARA, key: 'goals', value: { kg: 70, protein: 170, kcal: 1900 } }, { client_id: MONA, key: 'goals', value: { kg: 60 } }],
-    meal_plans: [{ client_id: OMAR, name: 'Lean bulk', targets: { kcal: 2800, protein: 170 }, modified_at: ago(3) }],
+    meal_plans: [{ id: 'plan-omar', coach_id: COACH.id, client_id: OMAR, name: 'Lean bulk', active: true, targets: { kcal: 2800, protein: 170 }, meals: [{ name: 'Breakfast', items: ['4 eggs', 'Oats'], kcal: 700, p: 45 }], modified_at: ago(3) }],
     programs: [],
     notes: {}, invites: [{ code: 'OLDCODE23456', expires_at: ago(-3), created_at: ago(4) }]
   };
@@ -54,8 +54,12 @@ function fakeApi(db, opts = {}) {
     links: async () => db.links.filter(l => l.status !== 'archived').map(plain),
     profiles: async ids => ids.map(id => db.profiles[id]).filter(Boolean).map(plain),
     rows: async (table, ids, cols, from) => db[table].filter(r => ids.includes(r.client_id) && (!from || r.date >= from)).map(plain),
-    plans: async ids => db.meal_plans.filter(r => ids.includes(r.client_id)).map(plain),
-    programs: async ids => db.programs.filter(r => ids.includes(r.client_id)).map(plain),
+    plans: async ids => db.meal_plans.filter(r => ids.includes(r.client_id) && r.active !== false && !r.deleted_at).map(plain),
+    programs: async ids => db.programs.filter(r => ids.includes(r.client_id) && r.active !== false && !r.deleted_at).map(plain),
+    templates: async table => db[table].filter(r => r.coach_id === COACH.id && r.client_id == null && !r.deleted_at).map(plain),
+    insertRow: async (table, row) => { const id = table + '-' + (db[table].length + 1); calls.push(['insert', table, row.client_id, row.name]); db[table].push(Object.assign({ id }, plain(row))); return id; },
+    updateRow: async (table, id, fields) => { calls.push(['update', table, id, Object.keys(fields).sort().join(',')]); Object.assign(db[table].find(r => r.id === id), plain(fields)); },
+    retire: async (table, me, clientId, keepId) => { calls.push(['retire', table, clientId, keepId]); db[table].forEach(r => { if (r.client_id === clientId && r.active && r.id !== keepId) r.active = false; }); },
     note: async (me, id) => db.notes[id] || '',
     saveNote: async (me, id, body) => { calls.push(['saveNote', id, body]); db.notes[id] = body; },
     setStatus: async (me, id, status) => { calls.push(['setStatus', id, status]); db.links.find(l => l.client_id === id).status = status; },
@@ -245,14 +249,27 @@ test('the dashboard is fully in Arabic when chosen', async t => {
   const p = page(t, fakeApi(fixture()), { lang: 'ar' });
   await p.settle();
   // names, emails, codes and the exercises and foods people typed stay as written
-  const english = () => [...p.doc.querySelectorAll('#view *, #mbox *, .c-top *')].filter(n => !n.children.length && /[A-Za-z]{3}/.test(n.textContent)
+  // text still in English: Latin words and no Arabic at all (a translated line may carry a name)
+  const english = () => [...p.doc.querySelectorAll('#view *, #mbox *, .c-top *')].filter(n => !n.children.length && /[A-Za-z]{3}/.test(n.textContent) && !/[\u0600-\u06FF]/.test(n.textContent)
     && !n.closest('[translate=no], svg, .c-exname, .c-sets small, .c-sets span')).map(n => n.textContent);
   assert.equal(p.doc.documentElement.dir, 'rtl');
   assert.deepEqual(english(), []);
-  for (const tab of ['summary', 'workouts', 'meals', 'body', 'notes']) {
+  for (const tab of ['summary', 'workouts', 'meals', 'body', 'program', 'mealplan', 'notes']) {
     await p.go('#client=' + SARA + '&tab=' + tab);
     assert.deepEqual(english().filter(x => !/^(Bench press|Overhead press|Pull-ups|Squat)$/.test(x)), [], tab);
   }
+  // the editors and the templates page
+  const opts = () => [...p.doc.querySelectorAll('.c-start option, .c-start optgroup')].map(o => o.label || o.textContent).filter(t => /^(A blank|Built-in|Your templates|The app's|What they follow)/.test(t));
+  await p.go('#client=' + SARA + '&tab=program');
+  assert.deepEqual(opts(), [], 'start menu');
+  p.doc.querySelector('.c-start button').click(); await p.settle();
+  assert.deepEqual(english(), [], 'program editor');
+  await p.go('#client=' + SARA + '&tab=mealplan');
+  p.doc.querySelector('.c-start select').value = 'example';
+  p.doc.querySelector('.c-start button').click(); await p.settle();
+  assert.deepEqual(english().filter(x => !/^(Breakfast|Lunch|Dinner)$/.test(x)), [], 'meal plan editor');
+  await p.go('#templates');
+  assert.deepEqual(english(), [], 'templates');
   await p.go('#');
   p.click('ادعُ متدربًا');
   await p.settle();
@@ -261,4 +278,124 @@ test('the dashboard is fully in Arabic when chosen', async t => {
   await p.settle();
   assert.equal(p.doc.documentElement.dir, 'ltr');
   assert.match(p.doc.querySelector('.c-h1').textContent, /Clients/);
+});
+
+test('the coach writes a program from a built-in one, edits a day in the app\'s own editor, and sends it', async t => {
+  const db = fixture(), api = fakeApi(db);
+  const p = page(t, api);
+  await p.settle();
+  await p.go('#client=' + SARA + '&tab=program');
+  const view = () => p.doc.getElementById('view').textContent;
+  assert.match(view(), /No program from you yet\. They follow My Split: Push \/ Pull \/ Legs \/ Upper in the app\./);
+  const sel = p.doc.querySelector('.c-start select');
+  sel.value = 'p:ul4';
+  p.click('Write the program');
+  await p.settle();
+  const name = p.doc.querySelector('.c-editor input');
+  assert.equal(name.value, 'Upper / Lower');
+  name.value = 'Upper / Lower for Sara'; name.dispatchEvent(new p.w.Event('input'));
+  assert.equal(p.doc.querySelectorAll('.c-editday').length, 4);
+  p.doc.querySelector('.c-editday button').click();  // Edit day: the app's day editor opens
+  await p.settle();
+  assert.match(p.doc.getElementById('mbox').textContent, /Edit Day/);
+  const sets = p.doc.querySelector('#mbox .eedit input');
+  sets.value = '5'; sets.dispatchEvent(new p.w.Event('input'));
+  p.click('Done');
+  await p.settle();
+  assert.equal(p.doc.getElementById('modal').hidden, true);
+  assert.equal(p.w.state.sessions.length, 4, "the client's own log is back on screen");
+  p.click('Send to Sara Ali');
+  await p.settle(14);
+  assert.deepEqual(api.calls.filter(c => c[0] === 'insert' || c[0] === 'retire'), [['insert', 'programs', SARA, 'Upper / Lower for Sara'], ['retire', 'programs', SARA, 'programs-1']]);
+  const sent = db.programs[0];
+  assert.equal(sent.active, true);
+  assert.equal(sent.days.length, 4);
+  assert.equal(sent.days[0].ex[0][1], 5, 'the change from the day editor was sent');
+  assert.match(view(), /Upper \/ Lower for Sara.*Sent/);
+  assert.match(view(), /Edit program.*Stop this program/);
+  assert.equal(p.w.localStorage.getItem('gymlog-v1'), null, 'nothing written to the device');
+});
+
+test('editing the current program updates it in place; it can be stopped, and saved as a template to reuse', async t => {
+  const db = fixture(), api = fakeApi(db);
+  db.programs.push({ id: 'prog-sara', coach_id: COACH.id, client_id: SARA, name: 'Cut phase', active: true, modified_at: ago(2), days: [{ id: 'a', name: 'Heavy', ex: [['Squat', 5, '5', 'Quads · Glutes', 150]] }] });
+  const p = page(t, api);
+  await p.settle();
+  await p.go('#client=' + SARA + '&tab=program');
+  assert.match(p.doc.getElementById('view').textContent, /Cut phase.*Heavy.*Squat.*5 × 5/);
+  p.click('Edit program');
+  await p.settle();
+  const name = p.doc.querySelector('.c-editor input');
+  name.value = 'Cut phase, week 2'; name.dispatchEvent(new p.w.Event('input'));
+  p.click('Save as template');
+  await p.settle(10);
+  assert.deepEqual(api.calls.at(-1), ['insert', 'programs', null, 'Cut phase, week 2']);
+  p.click('Send to Sara Ali');
+  await p.settle(14);
+  assert.ok(api.calls.some(c => c[0] === 'update' && c[1] === 'programs' && c[2] === 'prog-sara'), 'updated in place');
+  assert.ok(!api.calls.some(c => c[0] === 'insert' && c[2] === SARA), 'no second program for her');
+  assert.equal(db.programs.find(r => r.id === 'prog-sara').name, 'Cut phase, week 2');
+  // the template is offered on any client's page
+  await p.go('#client=' + MONA + '&tab=program');
+  const opts = [...p.doc.querySelectorAll('.c-start optgroup')].map(g => g.label + ': ' + [...g.querySelectorAll('option')].map(o => o.textContent).join(', '));
+  assert.ok(opts.includes('Your templates: Cut phase, week 2'), JSON.stringify(opts));
+  await p.go('#client=' + SARA + '&tab=program');
+  p.click('Stop this program');
+  await p.settle(14);
+  assert.equal(db.programs.find(r => r.id === 'prog-sara').active, false);
+  assert.match(p.doc.getElementById('view').textContent, /No program from you yet/);
+});
+
+test('a meal plan: targets and meals, checked before it is sent', async t => {
+  const db = fixture(), api = fakeApi(db);
+  const p = page(t, api);
+  await p.settle();
+  await p.go('#client=' + OMAR + '&tab=mealplan');
+  const view = () => p.doc.getElementById('view').textContent;
+  assert.match(view(), /Lean bulk.*2,800 kcal.*170 g protein.*Breakfast.*700 kcal, 45 g protein.*4 eggs.*Oats/);
+  const sel = p.doc.querySelector('.c-start select');
+  sel.value = 'example';
+  p.click('Write the meal plan');
+  await p.settle();
+  const inputs = () => [...p.doc.querySelectorAll('.c-editor input')];
+  assert.equal(p.doc.querySelectorAll('.c-meal').length, 3, "the app's three example meals");
+  const set = (el, v) => { el.value = v; el.dispatchEvent(new p.w.Event('input')); };
+  set(inputs()[0], 'Cut for Omar');
+  set(inputs()[1], '500');  // calories a day: too low
+  p.click('Send to Omar Khaled');
+  await p.settle(8);
+  assert.equal(p.doc.getElementById('toast').textContent, 'Calories a day must be 800–8000 kcal');
+  assert.ok(!api.calls.some(c => c[0] === 'insert'), 'nothing sent');
+  set(inputs()[1], '2300'); set(inputs()[2], '180');
+  p.click('Send to Omar Khaled');
+  await p.settle(14);
+  const sent = db.meal_plans.find(r => r.name === 'Cut for Omar');
+  assert.deepEqual(plain(sent.targets), { kcal: 2300, protein: 180 });
+  assert.equal(sent.meals.length, 3);
+  assert.equal(sent.meals[0].name, 'Breakfast');
+  assert.ok(sent.meals[0].items.length > 1);
+  assert.equal(db.meal_plans.find(r => r.id === 'plan-omar').active, false, 'the old plan is switched off');
+  assert.match(view(), /Cut for Omar.*2,300 kcal.*180 g protein/);
+});
+
+test('templates: write one, edit it, delete it', async t => {
+  const db = fixture(), api = fakeApi(db);
+  const p = page(t, api);
+  await p.settle();
+  assert.equal(p.doc.getElementById('c-nav').hidden, false);
+  await p.go('#templates');
+  const view = () => p.doc.getElementById('view').textContent;
+  assert.match(view(), /No program templates yet.*No meal plan templates yet/);
+  const sel = p.doc.querySelector('.c-start select');
+  sel.value = 'p:fb3';
+  p.doc.querySelectorAll('.c-start button')[0].click();
+  await p.settle();
+  p.click('Save template');
+  await p.settle(12);
+  assert.deepEqual(api.calls.at(-1), ['insert', 'programs', null, 'Full Body']);
+  assert.match(view(), /Programs1.*Full Body.*3 days/);
+  p.click('Delete');
+  await p.settle(12);
+  assert.ok(db.programs[0].deleted_at, 'soft-deleted, like everything else');
+  assert.match(view(), /No program templates yet/);
 });

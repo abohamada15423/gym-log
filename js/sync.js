@@ -35,7 +35,7 @@ function freshSync() {
   return {
     v: 1, uid: null, email: null, name: null, role: null, ask: false,
     cursor: {}, outbox: {}, shadow: {}, hold: {}, rejected: {},
-    coach: null, programs: {}, plans: {}, seenProgram: null, lastSync: null, invite: null
+    coach: null, programs: {}, plans: {}, seenProgram: null, seenProgramM: null, seenPlan: null, lastSync: null, invite: null
   };
 }
 var sync = (function () {
@@ -477,12 +477,17 @@ async function pullPeople() {
 
 // After a pull changed something: put the coach's program to work, keep lists in date order, redraw.
 function syncApplied() {
-  var cp = coachProgram();
+  // say what the coach changed, once, in one message
+  var cp = coachProgram(), plan = coachPlan(), said = [];
   if (cp && sync.seenProgram !== cp.id) {
-    sync.seenProgram = cp.id;
-    if (state.programId !== "coach") { state.programId = "coach"; toast("New program from your coach: " + cp.name, 3400); }
-  }
-  if (!cp) sync.seenProgram = null;
+    sync.seenProgram = cp.id; sync.seenProgramM = cp.m;
+    if (state.programId !== "coach") { state.programId = "coach"; said.push("New program from your coach: " + cp.name); }
+  } else if (cp && sync.seenProgramM !== cp.m) { sync.seenProgramM = cp.m; said.push("Your coach updated your program"); }
+  if (!cp) { sync.seenProgram = null; sync.seenProgramM = null; }
+  var planSig = plan ? plan.id + "@" + plan.m : null;
+  if (plan && sync.seenPlan !== planSig) said.push(sync.seenPlan && sync.seenPlan.split("@")[0] === plan.id ? "Your coach updated your meal plan" : "New meal plan from your coach: " + plan.name);
+  sync.seenPlan = planSig;
+  if (said.length) toast(said.join(" · "), 3600);
   if (syncRt.sortLists) {
     ["sessions", "food", "body"].forEach(function (list) {
       state[list] = state[list].map(function (x, i) { return { x: x, i: i }; })
