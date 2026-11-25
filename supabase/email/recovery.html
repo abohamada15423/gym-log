@@ -1,0 +1,56 @@
+{{/* Gym Log account email. One document per language, chosen by the language saved at sign-up (user_metadata.lang). Applied to Supabase Auth: see supabase/README.md */}}
+{{ if eq (printf "%v" .Data.lang) "ar" }}
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>كلمة مرور جديدة</title>
+</head>
+<body style="margin:0;padding:0;background:#e9e7e1;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#e9e7e1;">
+<tr><td align="center" style="padding:28px 14px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" dir="rtl" style="max-width:480px;background:#ffffff;border-radius:18px;overflow:hidden;">
+<tr><td dir="rtl" align="right" style="background:#151619;padding:18px 26px;font-family:Tahoma,Arial,sans-serif;font-size:22px;font-weight:800;line-height:1;color:#ece9e2;">سجل الجيم <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#c8f542;"></span></td></tr>
+<tr><td dir="rtl" align="right" style="padding:26px 26px 0;font-family:Tahoma,'Segoe UI',Arial,sans-serif;font-size:25px;font-weight:700;line-height:1.25;color:#151619;">كلمة مرور جديدة</td></tr>
+<tr><td dir="rtl" align="right" style="padding:12px 26px 0;font-family:Tahoma,'Segoe UI',Arial,sans-serif;font-size:16px;line-height:1.6;color:#33363b;">طُلب تغيير كلمة المرور للحساب <b dir="ltr">{{ .Email }}</b>. اضغط الزر لاختيار كلمة مرور جديدة.</td></tr>
+<tr><td dir="rtl" align="right" style="padding:24px 26px 0;">
+<a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#c8f542;color:#151619;font-family:Tahoma,'Segoe UI',Arial,sans-serif;font-size:16px;font-weight:700;line-height:1;text-decoration:none;padding:16px 26px;border-radius:12px;">اختيار كلمة مرور جديدة</a>
+</td></tr>
+<tr><td dir="rtl" align="right" style="padding:24px 26px 0;font-family:Tahoma,'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.6;color:#5f6268;">الرابط يعمل لمدة ساعة. إذا لم تطلب ذلك فتجاهل الرسالة، وستبقى كلمة مرورك كما هي.</td></tr>
+<tr><td dir="rtl" align="right" style="padding:16px 26px 26px;font-family:Tahoma,'Segoe UI',Arial,sans-serif;font-size:13px;line-height:1.6;color:#5f6268;">الزر لا يعمل؟ افتح هذا الرابط في المتصفح:<br><a href="{{ .ConfirmationURL }}" dir="ltr" style="color:#151619;word-break:break-all;">{{ .ConfirmationURL }}</a></td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+{{ else }}
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>Reset your password</title>
+</head>
+<body style="margin:0;padding:0;background:#e9e7e1;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#e9e7e1;">
+<tr><td align="center" style="padding:28px 14px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" dir="ltr" style="max-width:480px;background:#ffffff;border-radius:18px;overflow:hidden;">
+<tr><td dir="ltr" align="left" style="background:#151619;padding:18px 26px;font-family:'Arial Narrow',Arial,Helvetica,sans-serif;font-size:22px;font-weight:800;line-height:1;color:#ece9e2;">Gym Log <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#c8f542;"></span></td></tr>
+<tr><td dir="ltr" align="left" style="padding:26px 26px 0;font-family:Arial,Helvetica,sans-serif;font-size:25px;font-weight:700;line-height:1.25;color:#151619;">Reset your password</td></tr>
+<tr><td dir="ltr" align="left" style="padding:12px 26px 0;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#33363b;">Someone asked to reset the password for <b dir="ltr">{{ .Email }}</b>. Tap the button to choose a new one.</td></tr>
+<tr><td dir="ltr" align="left" style="padding:24px 26px 0;">
+<a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#c8f542;color:#151619;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;line-height:1;text-decoration:none;padding:16px 26px;border-radius:12px;">Choose a new password</a>
+</td></tr>
+<tr><td dir="ltr" align="left" style="padding:24px 26px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#5f6268;">The link works for one hour. If it wasn't you, ignore this email: your password stays the same.</td></tr>
+<tr><td dir="ltr" align="left" style="padding:16px 26px 26px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#5f6268;">Button not working? Open this link in your browser:<br><a href="{{ .ConfirmationURL }}" dir="ltr" style="color:#151619;word-break:break-all;">{{ .ConfirmationURL }}</a></td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+{{ end }}

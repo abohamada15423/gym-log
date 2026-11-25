@@ -1,0 +1,4 @@
+{
+  "confirmation": "{{ if eq (printf \"%v\" .Data.lang) \"ar\" }}أكّد بريدك في سجل الجيم{{ else }}Confirm your email for Gym Log{{ end }}",
+  "recovery": "{{ if eq (printf \"%v\" .Data.lang) \"ar\" }}كلمة مرور جديدة لسجل الجيم{{ else }}Reset your Gym Log password{{ end }}"
+}
