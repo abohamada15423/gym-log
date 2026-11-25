@@ -304,7 +304,32 @@ var AR_WORDS = {
   "Your coach can't see what you log until you renew.": "الكابتن مش هيشوف اللي بتسجّله لحد ما تجدد.",
   "Renew with your coach to keep your program and comments coming.": "جدّد مع الكابتن عشان البرنامج والتعليقات يفضلوا شغالين.",
   "Your coaching has ended. Your coach will see new comments once you renew.": "اشتراكك مع الكابتن خلص. الكابتن هيشوف التعليقات الجديدة لما تجدد.",
-  "1 subscription has ended.": "اشتراك واحد خلص."
+  "1 subscription has ended.": "اشتراك واحد خلص.",
+  // more than one coach (phase 7): the coach's own page, the invite, the admin view
+  "Your page": "صفحتك", "Admin": "الإدارة", "Save": "حفظ", "Discard changes": "تجاهل التغييرات", "Logo": "الشعار",
+  "Upload a logo": "ارفع شعارًا", "Change logo": "غيّر الشعار", "Remove logo": "احذف الشعار",
+  "How clients see you: on your invite before they join, then in their app.": "هكذا يراك المتدربون: في دعوتك قبل أن ينضموا، ثم في تطبيقهم.",
+  "That file isn't a picture we can read. Try a JPG or PNG.": "تعذّرت قراءة هذا الملف كصورة. جرّب صورة JPG أو PNG.",
+  "A square picture works best: the middle of it is shown, round. Without one, clients see your initials.": "الأفضل صورة مربعة: يظهر وسطها داخل دائرة. ومن غير صورة يرى المتدربون الحروف الأولى من اسمك.",
+  "Strength coach in Cairo. I help people train three days a week and eat well without counting every gram.": "كابتن تمارين قوة في القاهرة. أساعدك تتمرن ٣ أيام في الأسبوع وتأكل صح من غير ما تحسب كل جرام.",
+  "Your name": "اسمك", "Clients see “Coach” before it.": "يرى المتدربون كلمة «الكابتن» قبله.", "A short bio": "نبذة قصيرة",
+  "Saved ✓ Clients see it on your invite and in their app.": "تم الحفظ ✓ يراه المتدربون في دعوتك وفي تطبيقهم.",
+  "Preview": "معاينة", "Opening your invite link": "عند فتح رابط دعوتك", "In their app, once they've joined": "في تطبيقهم بعد الانضمام",
+  "Invited you to train with them": "دعاك للتمرن معه", "Sign in or create an account to join.": "سجّل الدخول أو أنشئ حسابًا للانضمام.",
+  "Join to share your training and meals with them.": "انضم لتشاركه تمارينك ووجباتك.",
+  "The platform in numbers. Clients' names, logs and payments stay with their coaches.": "المنصة بالأرقام. أسماء المتدربين وسجلاتهم ومدفوعاتهم تبقى مع الكباتن.",
+  "Totals": "الإجمالي", "Accounts": "الحسابات", "Coaches": "الكباتن", "Clients with a coach": "متدربون مع كابتن", "Recorded this month": "المسجَّل هذا الشهر",
+  "Subscriptions": "الاشتراكات", "This month": "هذا الشهر", "Open invites": "دعوات مفتوحة",
+  "No coaches yet. Add the first one below.": "لا يوجد كباتن بعد. أضف أول كابتن بالأسفل.",
+  "A coach can be stopped once they have no clients left.": "يمكن إيقاف الكابتن عندما لا يبقى معه متدربون.",
+  "Stop coaching": "إيقاف التدريب", "active": "نشط", "paid up": "مدفوع", "recorded": "مسجَّل", "code": "كود", "codes": "أكواد",
+  "Their email": "بريده الإلكتروني", "Make coach": "اجعله كابتن", "Add a coach": "أضف كابتن",
+  "They create an account in the Gym Log app first, with their own email and password. Then enter that email here. They sign in to this page with the same account.":
+    "ينشئ حسابًا في تطبيق سجل الجيم أولًا ببريده وكلمة مروره، ثم أدخل هذا البريد هنا. ويدخل إلى هذه الصفحة بنفس الحساب.",
+  "Enter the email they signed up with": "أدخل البريد الذي سجّل به", "Admins only": "للإدارة فقط",
+  "No account with that email. They need to create one in the app first.": "لا يوجد حساب بهذا البريد. يجب أن ينشئ حسابًا في التطبيق أولًا.",
+  "They are a client of a coach right now. They need to leave their coach first.": "هذا الحساب متدرب مع كابتن الآن. يجب أن يترك الكابتن أولًا.",
+  "They still have clients. They need to remove them first.": "ما زال معه متدربون. يجب أن يزيلهم أولًا."
 };
 
 var AR_DOW = { Sat: "السبت", Sun: "الأحد", Mon: "الاثنين", Tue: "الثلاثاء", Wed: "الأربعاء", Thu: "الخميس", Fri: "الجمعة" };
@@ -327,6 +352,14 @@ function unitAr(u) { return u === "kg" ? "كجم" : u === "cm" ? "سم" : u === 
 // [pattern, replacement]. Replacements get the match groups; trWord() keeps unknown names as they are.
 var AR_POSE = { front: "من الأمام", side: "من الجنب", back: "من الظهر", Front: "الأمام", Side: "الجنب", Back: "الظهر", Before: "قبل", After: "بعد" };
 var AR_RULES = [
+  // more than one coach (phase 7)
+  [/^(\d+) characters left$/, function (m) { return "المتبقي: " + m[1] + " حرف"; }],
+  [/^active, (\d+) paused$/, function (m) { return "نشط، و" + m[1] + " موقوف"; }],
+  [/^paid up, (\d+) ended$/, function (m) { return "مدفوع، و" + m[1] + " منتهٍ"; }],
+  [/^Stop (.+) coaching\? Their account stays, as an ordinary one, and their open invite codes stop working\.$/, function (m) { return "إيقاف " + m[1] + " عن التدريب؟ يبقى حسابه حسابًا عاديًا، وتتوقف أكواد دعوته المفتوحة."; }],
+  [/^(.+) no longer coaches$/, function (m) { return "لم يعد " + m[1] + " كابتن"; }],
+  [/^(.+) is already a coach$/, function (m) { return m[1] + " كابتن بالفعل"; }],
+  [/^(.+) is a coach now ✓$/, function (m) { return "أصبح " + m[1] + " كابتن ✓"; }],
   // subscriptions: amounts in pounds, days, and sentences that carry a date
   [/^([\d,]+(?:\.\d+)?) EGP$/, function (m) { return m[1] + " جنيه"; }],
   [/^Recorded this month: ([\d,]+(?:\.\d+)?) EGP$/, function (m) { return "اتسجّل الشهر ده: " + m[1] + " جنيه"; }],

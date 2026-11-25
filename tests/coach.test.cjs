@@ -100,7 +100,23 @@ function fakeApi(db, opts = {}) {
     },
     photoUrls: async paths => { calls.push(['photoUrls', paths.length]); return Object.fromEntries(paths.map(p => [p, 'https://storage.example/signed/' + p])); },
     savePush: async row => { calls.push(['savePush', row.user_id, row.endpoint, row.lang]); },
-    dropPush: async (me, endpoint) => { calls.push(['dropPush', me, endpoint]); }
+    dropPush: async (me, endpoint) => { calls.push(['dropPush', me, endpoint]); },
+    // the coach's own page and the admin view (0006_platform.sql)
+    saveProfile: async (me, fields) => { calls.push(['saveProfile', me, plain(fields)]); if (opts.failSave) throw new Error('Something went wrong. Try again.'); Object.assign(db.profiles[me], plain(fields)); },
+    uploadLogo: async (path, blob) => { calls.push(['uploadLogo', path, blob.type]); },
+    removeLogos: async paths => { calls.push(['removeLogos', plain(paths)]); },
+    overview: async () => {
+      calls.push(['overview']);
+      if (!(db.profiles[COACH.id] || {}).is_admin) throw Object.assign(new Error('Admins only'), { code: '42501' });
+      return plain(db.overview);
+    },
+    makeCoach: async email => {
+      calls.push(['makeCoach', email]);
+      if (email === 'nobody@example.com') throw new Error('No account with that email. They need to create one in the app first.');
+      db.overview.list.push({ id: 'c3', name: 'Tarek Said', email, admin: false, active: 0, paused: 0, paying: 0, ended: 0, recorded: 0, invites: 0 });
+      return { id: 'c3', name: 'Tarek Said', already: false };
+    },
+    stopCoach: async id => { calls.push(['stopCoach', id]); db.overview.list = db.overview.list.filter(c => c.id !== id); }
   };
   return api;
 }
@@ -615,4 +631,149 @@ test('subscriptions: ending soon is a flag, ended is its own group and read only
   const recorded = db.payments.find(x => x.amount === 4000);
   assert.deepEqual(api.calls.filter(c => c[0] === 'withdrawPayment'), [['withdrawPayment', recorded.id]]);
   assert.ok(p.doc.querySelector('.c-ended'), 'back to where the payment before it ended');
+});
+
+// ---- phase 7: the coach's own page, and the admin view --------------------------------------------
+const LOGOS = 'https://wacekcjwcvcawdptbgwv.supabase.co/storage/v1/object/public/coach-logos/';
+function asAdmin(db, coaches) {
+  db.profiles[COACH.id].is_admin = true;
+  db.overview = { accounts: 9, coaches: 2, clients: 4, recorded: 5500, list: coaches || [
+    { id: COACH.id, name: 'Karim Mostafa', email: 'coach@example.com', admin: true, active: 3, paused: 1, paying: 2, ended: 1, recorded: 5500, invites: 1 },
+    { id: 'c2', name: 'Hana Fawzy', email: 'hana@example.com', admin: false, active: 0, paused: 0, paying: 0, ended: 0, recorded: 0, invites: 2 }
+  ] };
+  return db;
+}
+function pickLogo(p) {
+  const input = p.doc.querySelector('.c-pageform input[type=file]');
+  Object.defineProperty(input, 'files', { value: [new p.w.Blob(['y'], { type: 'image/jpeg' })], configurable: true });
+  input.dispatchEvent(new p.w.Event('change'));
+}
+
+test("your page: the coach's name, bio and logo, seen as clients see them, and saved together", async t => {
+  const db = fixture(), api = fakeApi(db), old = COACH.id + '/logo-old0000000000001.webp';
+  db.profiles[COACH.id].avatar_path = old;
+  const p = page(t, api, { hash: '#page' });
+  p.w.URL.createObjectURL = () => 'blob:the-new-logo'; p.w.URL.revokeObjectURL = () => {};
+  p.w.logoShrink = async () => new p.w.Blob(['x'], { type: 'image/webp' });  // no canvas here
+  await p.settle();
+  assert.equal(p.doc.querySelector('.c-nav a[aria-current=page]').textContent, 'Your page');
+  assert.equal(p.doc.querySelector('.c-logo-row img').getAttribute('src'), LOGOS + old);
+  const card = () => p.doc.querySelector('.c-preview .coach-card');
+  assert.match(card().textContent, /^Coach Karim MostafaInvited you to train with them$/);
+  assert.equal(p.doc.querySelector('.c-preview .c-sheet-row').textContent, 'Coach Karim Mostafa');
+  const save = () => [...p.doc.querySelectorAll('.c-pageform button')].find(b => b.textContent === 'Save');
+  assert.equal(save().disabled, true, 'nothing to save yet');
+  // the preview follows the typing
+  const name = p.doc.querySelector('.c-pageform input[type=text]'), bio = p.doc.querySelector('.c-pageform textarea');
+  name.value = 'Karim M.'; name.dispatchEvent(new p.w.Event('input'));
+  bio.value = 'Strength coach in Cairo.\nThree days a week.'; bio.dispatchEvent(new p.w.Event('input'));
+  assert.equal(card().querySelector('b').textContent, 'Coach Karim M.');
+  assert.equal(card().querySelector('.coach-bio').textContent, 'Strength coach in Cairo.\nThree days a week.');
+  assert.equal(card().querySelector('.coach-bio').getAttribute('translate'), 'no');
+  assert.equal(p.doc.querySelector('.c-count-left').textContent, (300 - bio.value.length) + ' characters left');
+  assert.equal(save().disabled, false);
+  // a new logo shows straight away, round, in the form and the preview
+  pickLogo(p); await p.settle();
+  assert.equal(p.doc.querySelector('.c-logo-row img').getAttribute('src'), 'blob:the-new-logo');
+  assert.equal(card().querySelector('img').getAttribute('src'), 'blob:the-new-logo');
+  assert.equal(p.doc.querySelector('.c-pageform input[type=text]').value, 'Karim M.', 'what was typed stays');
+  // saved together: the logo first, then the profile pointing at it; then the old file goes
+  save().click(); await p.settle();
+  const up = api.calls.find(c => c[0] === 'uploadLogo');
+  assert.match(up[1], new RegExp('^' + COACH.id + '/logo-[0-9a-f]{16}\\.webp$'));
+  assert.deepEqual(api.calls.filter(c => c[0] === 'saveProfile'), [['saveProfile', COACH.id, { full_name: 'Karim M.', bio: 'Strength coach in Cairo.\nThree days a week.', avatar_path: up[1] }]]);
+  assert.deepEqual(api.calls.filter(c => c[0] === 'removeLogos'), [['removeLogos', [old]]]);
+  assert.match(p.doc.getElementById('toast').textContent, /Saved ✓ Clients see it on your invite and in their app\./);
+  assert.equal(p.doc.querySelector('.c-logo-row img').getAttribute('src'), LOGOS + up[1]);
+  // taking the logo off: initials, and the file goes once saved
+  p.click('Remove logo'); await p.settle();
+  assert.equal(card().querySelector('img'), null);
+  assert.equal(card().querySelector('.coach-face').textContent, 'KM');
+  save().click(); await p.settle();
+  assert.equal(api.calls.filter(c => c[0] === 'saveProfile')[1][2].avatar_path, null);
+  assert.deepEqual(api.calls.filter(c => c[0] === 'removeLogos')[1], ['removeLogos', [up[1]]]);
+  // a name is needed
+  const n2 = p.doc.querySelector('.c-pageform input[type=text]');
+  n2.value = '  '; n2.dispatchEvent(new p.w.Event('input'));
+  save().click(); await p.settle();
+  assert.equal(p.doc.querySelector('.c-pageform .form-err').textContent, 'Enter your name');
+  assert.equal(api.calls.filter(c => c[0] === 'saveProfile').length, 2);
+});
+
+test('your page: when saving fails, the new logo is removed again and nothing is lost', async t => {
+  const db = fixture(), api = fakeApi(db, { failSave: true });
+  const p = page(t, api, { hash: '#page' });
+  p.w.URL.createObjectURL = () => 'blob:the-new-logo'; p.w.URL.revokeObjectURL = () => {};
+  p.w.logoShrink = async () => new p.w.Blob(['x'], { type: 'image/png' });
+  await p.settle();
+  pickLogo(p); await p.settle();
+  p.click('Save'); await p.settle();
+  const up = api.calls.find(c => c[0] === 'uploadLogo');
+  assert.match(up[1], /\.png$/);
+  assert.deepEqual(api.calls.filter(c => c[0] === 'removeLogos'), [['removeLogos', [up[1]]]]);
+  assert.equal(p.doc.querySelector('.c-pageform .form-err').textContent, 'Something went wrong. Try again.');
+  assert.equal(p.doc.querySelector('.c-logo-row img').getAttribute('src'), 'blob:the-new-logo', 'still there to try again');
+});
+
+test('the admin view: numbers per coach, never a client; add a coach by email; stop one who has no clients', async t => {
+  const db = asAdmin(fixture()), api = fakeApi(db);
+  const p = page(t, api);
+  await p.settle();
+  const admin = p.doc.querySelector('.c-nav a[data-view=admin]');
+  assert.equal(admin.hidden, false);
+  await p.go('#admin');
+  assert.equal(p.doc.querySelector('.c-h1').textContent, 'Admin');
+  assert.deepEqual([...p.doc.querySelectorAll('.c-total')].map(x => x.textContent), ['9Accounts', '2Coaches', '4Clients with a coach', '5,500 EGPRecorded this month']);
+  const rows = () => [...p.doc.querySelectorAll('.c-coaches .arow:not(.c-colhead)')];
+  assert.equal(rows().length, 2);
+  assert.match(rows()[0].textContent, /^KMKarim Mostafacoach@example\.comYouAdmin3active, 1 paused2paid up, 1 ended5,500 EGPrecorded1code$/);
+  assert.equal(rows()[0].querySelector('button'), null, 'a coach with clients cannot be stopped');
+  assert.match(rows()[1].textContent, /Hana Fawzy.*hana@example\.com.*0active0paid up0 EGPrecorded2codes.*Stop coaching/);
+  assert.match(p.doc.getElementById('view').textContent, /A coach can be stopped once they have no clients left\./);
+  for (const who of ['Sara Ali', 'Omar Khaled', 'Mona Adel', 'Youssef Nabil']) assert.ok(!p.doc.getElementById('view').textContent.includes(who), who);
+  // add a coach
+  const form = p.doc.querySelector('.c-addcoach'), email = form.querySelector('input[type=email]');
+  form.querySelector('button').click(); await p.settle();
+  assert.equal(form.querySelector('.form-err').textContent, 'Enter the email they signed up with');
+  email.value = 'nobody@example.com'; form.querySelector('button').click(); await p.settle();
+  assert.equal(form.querySelector('.form-err').textContent, 'No account with that email. They need to create one in the app first.');
+  email.value = ' tarek@example.com '; form.querySelector('button').click(); await p.settle();
+  assert.deepEqual(api.calls.filter(c => c[0] === 'makeCoach').map(c => c[1]), ['nobody@example.com', 'tarek@example.com']);
+  assert.match(p.doc.getElementById('toast').textContent, /Tarek Said is a coach now ✓/);
+  assert.equal(rows().length, 3, 'the list is fresh');
+  // stop one
+  rows()[1].querySelector('button').click(); await p.settle();
+  assert.deepEqual(api.calls.filter(c => c[0] === 'stopCoach'), [['stopCoach', 'c2']]);
+  assert.match(p.doc.getElementById('toast').textContent, /Hana Fawzy no longer coaches/);
+  assert.equal(rows().length, 2);
+});
+
+test("an admin who doesn't coach sees only the admin view; a coach who isn't an admin never does", async t => {
+  const db = asAdmin(fixture(), []);
+  db.profiles[COACH.id].role = 'client';
+  const api = fakeApi(db), p = page(t, api);
+  await p.settle();
+  assert.equal(p.doc.querySelector('.c-h1').textContent, 'Admin');
+  assert.deepEqual([...p.doc.querySelectorAll('.c-nav a')].filter(a => !a.hidden).map(a => a.textContent), ['Admin']);
+  assert.match(p.doc.getElementById('view').textContent, /No coaches yet\. Add the first one below\./);
+  assert.equal(p.doc.getElementById('c-bell').hidden, true);
+  for (const h of ['#templates', '#page', '#client=' + SARA]) { await p.go(h); assert.equal(p.doc.querySelector('.c-h1').textContent, 'Admin', h); }
+  // and the other way round
+  const q = page(t, fakeApi(fixture()), { hash: '#admin' });
+  await q.settle();
+  assert.equal(q.doc.querySelector('.c-nav a[data-view=admin]').hidden, true);
+  assert.equal(q.doc.querySelector('.c-h1').textContent, 'Clients');
+});
+
+test('your page and the admin view are in Arabic too', async t => {
+  const db = asAdmin(fixture()), p = page(t, fakeApi(db), { lang: 'ar', hash: '#page' });
+  await p.settle();
+  const english = () => [...p.doc.querySelectorAll('#view *, .c-top *')].filter(n => !n.children.length && /[A-Za-z]{3}/.test(n.textContent) && !/[\u0600-\u06FF]/.test(n.textContent)
+    && !n.closest('[translate=no], svg')).map(n => n.textContent);
+  assert.deepEqual(english(), []);
+  assert.match(p.doc.querySelector('.c-preview .coach-card').textContent, /الكابتن Karim Mostafa/);
+  assert.match(p.doc.querySelector('.c-pageform textarea').getAttribute('placeholder'), /[\u0600-\u06FF]/);
+  await p.go('#admin');
+  assert.deepEqual(english(), []);
+  assert.match(p.doc.querySelector('.c-total').textContent, /الحسابات/);
 });

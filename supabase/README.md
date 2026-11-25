@@ -9,6 +9,7 @@
 | `migrations/0003_comments_push.sql` | التعليقات (إيصال القراية، وصندوق الكابتن)، واشتراكات الإشعارات، والإشعار اللي بيتبعت لكل حدث، وتذكير أيام التمرين (المرحلة ٤) |
 | `migrations/0004_progress_photos.sql` | صور التقدّم: ٣ صور لكل قياس (`photos`)، وأسماء الملفات متشيّكة، والـ bucket بيقبل صور بس و٢ ميجا بالكتير (المرحلة ٥) |
 | `migrations/0005_subscriptions.sql` | الاشتراكات: `payments` و`paid_until`، و`record_payment()` و`withdraw_payment()`، والكابتن بيشوف لحد آخر يوم مدفوع بس، وتذكير التجديد (المرحلة ٦) |
+| `migrations/0006_platform.sql` | أكتر من كابتن: الأدمن (`is_admin`)، ونبذة الكابتن ولوجو في bucket عام `coach-logos`، و`invite_info()` للي معاه دعوة، و`admin_overview()` و`admin_make_coach()` و`admin_stop_coach()` (المرحلة ٧) |
 | `functions/push/` | الـ Edge Function اللي بتشفّر الإشعار وتبعته (Web Push بـ VAPID). `index.ts` للنشر، والشغل في `handler.mjs` و`webpush.mjs` |
 | `tests/rls.test.cjs` | اختبارات بتثبت كل قاعدة صلاحية على Postgres محلي |
 | `tests/supabase_stub.sql` | نسخة مصغّرة من Supabase للاختبارات بس. **ماتنفذوش على المشروع الحقيقي** |
@@ -87,6 +88,15 @@
     - المتدرب شاف «اشتراكك خلص».
     - دفعة ٣ شهور بدأت من النهارده، ورجّعت كل حاجة.
     - تذكير «بيخلص بعد ٣ أيام» وصل للـ function ولـ Google مرة واحدة بس.
+- **المرحلة ٧ (أكتر من كابتن):**
+  - **`0006_platform.sql` اتطبق**، و«Mohamed Omar» بقى أدمن.
+  - **الاختبار على المشروع الحقيقي** بحسابات وهمية اتمسحت بعدها، و٣٣ من ٣٣ نجحوا:
+    - الكابتن رفع لوجو وكتب نبذة، واتحفظوا، واللوجو اتقص مربع 400 بكسل WebP في الـ bucket العام.
+    - حد من غير حساب فتح لينك الدعوة وشاف الكارت باللوجو، بالعربي والإنجليزي، والكود المستخدم مابيرجّعش حاجة.
+    - المتدربة انضمت، ولوجو الكابتن ظهر عندها فوق وفي إعدادات الحساب، واتغيّر لما الكابتن غيّره.
+    - المتدربة مقدرتش ترفع لوجو ولا تخلّي نفسها أدمن ولا تشوف الأرقام، ولا حد من غير حساب.
+    - الأدمن عمل حساب كابتن بالإيميل ووقّفه، ورفض إيميل مش موجود وإيميل متدربة عند كابتن.
+    - اللوجو القديم اتمسح لما اتغيّر، والأخير اتمسح لما الكابتن شاله.
 - **إعدادات الدخول:**
   - Site URL هو `https://abohamada15423.github.io/gym-log/`.
   - Redirect URLs هي الموقع و`localhost:8000` و`localhost:8765`.
@@ -113,14 +123,15 @@
 3. الصقه في الـ SQL Editor واضغط **Run**.
 4. المفروض يظهر **Success. No rows returned**. لو ظهر خطأ، ابعتلي نصّه بالظبط.
 
-### ٣. اعمل نفسك كابتن
+### ٣. اعمل نفسك أدمن (وكابتن لو عايز)
 1. من **Authentication**، ثم **Users**، اضغط **Add user** ثم **Create new user**. حط إيميلك وعلّم على **Auto Confirm User**.
-2. ارجع للـ **SQL Editor** ونفّذ السطر ده بعد ما تحط إيميلك:
+2. ارجع للـ **SQL Editor** ونفّذ السطر ده بعد ما تحط إيميلك. ده الطريق الوحيد لأدمن، محدش يقدر يعملها من الأبلكيشن:
    ```sql
-   update public.profiles set role = 'coach'
+   update public.profiles set is_admin = true
    where id = (select id from auth.users where email = 'YOUR_EMAIL');
    ```
    المفروض يقول **1 row affected**.
+3. بعد كده الكباتن بيتعملوا من `coach.html`، ثم **Admin**، ثم **Add a coach** بإيميل حسابهم. ولو عايز تبقى كابتن انت كمان، اكتب إيميلك هناك.
 
 ### ٤. إعدادات تسجيل الدخول
 1. **Authentication**، ثم **Sign In / Providers**: اتأكد إن **Email** شغال.
@@ -171,6 +182,8 @@ What the tests prove (one test each):
 
 The suite was also checked against eleven deliberate breakages of the migration (anon access, missing `search_path`, coach editing client comments, writable `read_at`, editable `role`, older edits winning, re-activating archived links, reusable invites, invites reusable after account deletion, checking the code before the existing coach, coaches reading other folders). Each one made a test fail.
 
+Phase 7 (`0006_platform.sql`): a coach's bio (300 characters at most) and logo, which must be a file the app named in their own folder; the `coach-logos` bucket is public, takes small pictures only, and only a coach writes to their own folder (a client can't upload at all, another coach can't change or delete it); `invite_info()` gives a visitor holding a working code the coach's name, bio and logo, and nothing for a used, expired or made-up code, and it is the only thing a visitor can call; nobody makes themself an admin; `admin_overview()` is for admins only and holds numbers, never a client's name, log or payments; an admin makes a coach by email (refused for an unknown email or someone's client) and stops one only once they have no clients, which removes their open invites. Checked against nineteen deliberate breakages, each caught.
+
 Phase 6 (`0005_subscriptions.sql`): only the coach records payments, each running on from the last paid day (or today, once ended), with friendly refusals; only the latest can be taken back; after the last paid day the coach reads only rows (workouts, meals, check-ins, habits, comments, photos) dated up to it, can't write programs, meal plans or comments, and isn't woken by the client's comments; a payment brings back everything, including what was logged meanwhile; renewal reminders three days before and the day after, once each, not for paused clients; a new invite starts without the old subscription. Checked against ten deliberate breakages, each caught.
 
 Phase 5 (`0004_progress_photos.sql`): a check-in holds up to three photos, named the way the app names them (another pose, a path out of the folder, someone else's folder or another file type is refused); the bucket takes photos up to 2 MB only and stays private.
@@ -204,4 +217,4 @@ Keep the VAPID keys as they are: browsers subscribe with the public key, so new 
 
 ## Changing the schema later
 
-Add a new file, `migrations/0006_<what>.sql`. Don't edit a migration that already ran on the project. Add tests for any new rule to `tests/rls.test.cjs` and run `npm run test:db` before applying the file in the SQL editor.
+Add a new file, `migrations/0007_<what>.sql`. Don't edit a migration that already ran on the project. Add tests for any new rule to `tests/rls.test.cjs` and run `npm run test:db` before applying the file in the SQL editor.

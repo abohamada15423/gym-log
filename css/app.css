@@ -2725,3 +2725,19 @@ button.coach-name:focus-visible { outline: 2px solid var(--accent); outline-offs
 .pay-list { display: flex; flex-direction: column; gap: 6px }
 .pay-row { display: flex; justify-content: space-between; gap: 10px; font-size: .9rem }
 .pay-row span { color: var(--muted); text-align: end }
+
+/* ---------- a coach as clients see them (phase 7) ---------- */
+/* the face: their logo filling the circle, on chalk so a logo with a see-through background still shows;
+   their initials when there's no logo. The lime ring is the same as the header's: the link is live. */
+.has-logo { overflow: hidden; padding: 0 !important; background: var(--ink) !important }
+.has-logo > img { width: 100%; height: 100%; object-fit: cover; display: block; -webkit-user-drag: none }
+.coach-face { flex: none; width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 2px solid var(--accent); color: var(--accent); font: 800 1.45rem/1 var(--f-display) }
+.coach-face.lg { width: 104px; height: 104px; font-size: 2.3rem; border-width: 3px }
+.coach-card { display: flex; align-items: flex-start; gap: 14px; padding: 16px; background: var(--surface-2); border-radius: 18px; text-align: start }
+.coach-card-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 5px }
+.coach-card-txt b { font: 800 1.55rem/1.05 var(--f-display); overflow-wrap: anywhere }
+.coach-card-txt small { color: var(--muted); font-size: .88rem }
+.coach-bio { margin: 8px 0 0; font-size: .95rem; line-height: 1.45; color: var(--ink); white-space: pre-line; overflow-wrap: anywhere }
+.acct-coach-bio { margin: -2px 0 0; padding-inline-start: 42px }
+.acct-coach-bio p { margin: 0; font-size: .9rem; line-height: 1.45; color: var(--ink); white-space: pre-line; overflow-wrap: anywhere }
+.inv-head { display: flex; flex-direction: column; gap: 10px }
