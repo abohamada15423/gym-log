@@ -1,5 +1,6 @@
 // Coach dashboard (coach.html): every client at a glance, one client's log read-only, private notes and
-// invites. Phase 2 of docs/coach-plan.md (section 7).
+// invites. Phase 2 of docs/coach-plan.md (section 7). Phase 7 adds the coach's own page (how clients see
+// them) and, for whoever runs the platform, an Admin view: the numbers, and who coaches.
 //
 // It reuses the app's own pieces. While a client is open, `state` holds that client's log in the app's
 // shape, so the Progress tab's week card, calendar, records and muscle map draw it exactly as the client
@@ -24,9 +25,10 @@ baseState.lang = coachPrefs.lang;
 function save() { }
 
 // C: everything the page knows. phase: loading | signin | notcoach | ready | error.
+// view: list | client | templates | page | admin. An admin who doesn't coach only has the admin view.
 // edit: the program or meal plan being written ({ kind, clientId (null = template), rowId, draft, dirty }).
 // templates: the coach's own programs and meal plans with no client, loaded when first needed.
-var C = { phase: "loading", me: null, clients: [], byId: {}, view: "list", id: null, tab: "summary", client: null, error: null, tallied: false, edit: null, templates: null };
+var C = { phase: "loading", me: null, clients: [], byId: {}, view: "list", id: null, tab: "summary", client: null, error: null, tallied: false, edit: null, templates: null, page: null, admin: null };
 var CLIENT_TABS = [["summary", "Summary"], ["comments", "Comments"], ["workouts", "Workouts"], ["meals", "Meals"], ["body", "Body"], ["program", "Program"], ["mealplan", "Meal plan"], ["payments", "Payments"], ["notes", "Notes"]];
 
 /* ---------- talking to the server ---------- */
@@ -52,7 +54,7 @@ var coachApi = window.coachApi || {
   user: function () { return coachDb().auth.getSession().then(function (r) { return r.data && r.data.session ? r.data.session.user : null; }); },
   signIn: function (email, pw) { return coachDb().auth.signInWithPassword({ email: email, password: pw }).then(function (r) { if (r.error) throw r.error; return r.data.user; }); },
   signOut: function () { return coachDb().auth.signOut({ scope: "local" }); },
-  profile: function (id) { return coachDb().from("profiles").select("id,full_name,role").eq("id", id).maybeSingle().then(must); },
+  profile: function (id) { return coachDb().from("profiles").select("id,full_name,role,is_admin,bio,avatar_path").eq("id", id).maybeSingle().then(must); },
   links: function (me) { return coachDb().from("coach_clients").select("client_id,status,started_at,paid_until").eq("coach_id", me).neq("status", "archived").then(must); },
   profiles: function (ids) { return coachDb().from("profiles").select("id,full_name").in("id", ids).then(must); },
   // rows of a client table for these clients, newest first, all pages
@@ -110,6 +112,16 @@ var coachApi = window.coachApi || {
   monthPayments: function (me, since) { return coachDb().from("payments").select("amount,created_at").eq("coach_id", me).is("deleted_at", null).gte("created_at", since).then(must); },
   recordPayment: function (id, amount, days, method, note) { return coachDb().rpc("record_payment", { p_client: id, p_amount: amount, p_days: days, p_method: method, p_note: note || null }).then(must); },
   withdrawPayment: function (paymentId) { return coachDb().rpc("withdraw_payment", { p_payment: paymentId }).then(must); },
+  // the coach's own page (phase 7): their name, bio and logo, as clients see them
+  saveProfile: function (me, fields) { return coachDb().from("profiles").update(fields).eq("id", me).then(must); },
+  uploadLogo: function (path, blob) {
+    return coachDb().storage.from("coach-logos").upload(path, blob, { contentType: blob.type, upsert: false, cacheControl: "31536000" }).then(function (r) { if (r.error) throw r.error; });
+  },
+  removeLogos: function (paths) { return coachDb().storage.from("coach-logos").remove(paths).then(function (r) { if (r.error) throw r.error; }); },
+  // admins (phase 7): the platform in numbers, and who coaches
+  overview: function () { return coachDb().rpc("admin_overview").then(must); },
+  makeCoach: function (email) { return coachDb().rpc("admin_make_coach", { p_email: email }).then(must); },
+  stopCoach: function (id) { return coachDb().rpc("admin_stop_coach", { p_coach: id }).then(must); },
   // notifications in this browser
   savePush: function (row) { return coachDb().from("push_subscriptions").upsert(row, { onConflict: "user_id,endpoint" }).then(must); },
   dropPush: function (me, endpoint) { return coachDb().from("push_subscriptions").delete().eq("user_id", me).eq("endpoint", endpoint).then(must); }
@@ -229,15 +241,18 @@ async function start() {
   try {
     var user = await coachApi.user();
     if (!user) { C.phase = "signin"; render(); return; }
-    var p = await coachApi.profile(user.id);
-    C.me = { id: user.id, email: user.email, name: p && p.full_name, role: p && p.role };
-    if (C.me.role !== "coach") { C.phase = "notcoach"; render(); return; }
-    await loadRoster();
+    var p = await coachApi.profile(user.id) || {};
+    C.me = { id: user.id, email: user.email, name: p.full_name || null, role: p.role, admin: !!p.is_admin, bio: p.bio || "", logo: p.avatar_path || null };
+    C.page = null; C.admin = null;
+    if (!isCoach() && !C.me.admin) { C.phase = "notcoach"; render(); return; }
+    if (isCoach()) await loadRoster();
+    else { C.clients = []; C.byId = {}; }
     C.phase = "ready";
     route();
-    refreshBell();
+    if (isCoach()) refreshBell();
   } catch (e) { C.phase = "error"; C.error = netMsg(e); render(); }
 }
+function isCoach() { return !!C.me && C.me.role === "coach"; }
 async function loadRoster() {
   var links = await coachApi.links(C.me.id), ids = links.map(function (l) { return l.client_id; }), now = today();
   var people = {}, got = [[], [], [], [], [], [], [], []];
@@ -293,11 +308,12 @@ async function loadClient(id) {
   };
 }
 
-/* ---------- routes: #client=<id>&tab=<tab> ---------- */
+/* ---------- routes: #client=<id>&tab=<tab>, #templates, #page, #admin ---------- */
 function route() {
-  var q = new URLSearchParams(location.hash.slice(1)), id = q.get("client");
+  var q = new URLSearchParams(location.hash.slice(1)), id = q.get("client"), at = location.hash;
   if (C.phase !== "ready") { render(); return; }
-  if (location.hash === "#templates") { C.view = "templates"; C.id = null; C.client = null; commentsSource = null; photoSource = null; state = baseState; render(); return; }
+  if ((at === "#admin" && C.me.admin) || !isCoach()) { openView("admin"); loadAdmin(); return; }
+  if (at === "#templates" || at === "#page") { openView(at.slice(1)); return; }
   if (!id || !C.byId[id]) { openList(); return; }
   var tab = q.get("tab");
   C.tab = CLIENT_TABS.some(function (t) { return t[0] === tab; }) ? tab : "summary";
@@ -309,7 +325,8 @@ function route() {
     C.client = cl; state = cl.state; commentsSource = coachComments(C.byId[id], cl); photoSource = coachPhotos(id, cl); render();
   }).catch(function (e) { if (C.id === id) { C.error = netMsg(e); C.client = { failed: true }; render(); } });
 }
-function openList() { C.view = "list"; C.id = null; C.client = null; commentsSource = null; photoSource = null; state = baseState; render(); }
+function openView(v) { C.view = v; C.id = null; C.client = null; commentsSource = null; photoSource = null; state = baseState; render(); }
+function openList() { openView("list"); }
 function go(hash) { if (location.hash !== hash) location.hash = hash; else route(); }
 window.addEventListener("hashchange", route);
 
@@ -322,7 +339,11 @@ function render() {
   paintBell();
   var nav = $("c-nav");
   nav.hidden = C.phase !== "ready";
-  nav.querySelectorAll("a").forEach(function (a) { a.setAttribute("aria-current", String(a.getAttribute("data-view") === (C.view === "templates" ? "templates" : "list") && C.phase === "ready" ? "page" : false)); });
+  nav.querySelectorAll("a").forEach(function (a) {
+    var v = a.getAttribute("data-view");
+    a.hidden = v === "admin" ? !(C.me && C.me.admin) : !isCoach();  // the admin view is for admins; the rest is for coaches
+    a.setAttribute("aria-current", String(C.phase === "ready" && v === (C.view === "client" ? "list" : C.view) ? "page" : false));
+  });
   if (typeof clearAnimLoops === "function") clearAnimLoops();
   document.title = (C.view === "client" && C.byId[C.id] ? C.byId[C.id].name + " | " : "") + trText("Gym Log Coach");
   if (C.phase === "loading") root.appendChild(h("p", { class: "c-quiet", text: "Loading…" }));
@@ -331,6 +352,8 @@ function render() {
   else if (C.phase === "error") renderError(root);
   else if (C.view === "client") renderClient(root);
   else if (C.view === "templates") renderTemplates(root);
+  else if (C.view === "page") renderPage(root);
+  else if (C.view === "admin") renderAdmin(root);
   else renderRoster(root);
 }
 function renderError(root) {
@@ -841,7 +864,7 @@ function tabComments(body, c) {
 }
 // New comments while the page is open: the inbox every minute, and right away when a notification comes in.
 async function pollComments() {
-  if (C.phase !== "ready" || C.polling || document.visibilityState === "hidden") return;
+  if (C.phase !== "ready" || !isCoach() || C.polling || document.visibilityState === "hidden") return;
   C.polling = true;
   try {
     var rows = await coachApi.inbox(), news = false;
@@ -870,7 +893,7 @@ var BELL_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 16.5v-
 // One button, always called Notifications: pressed (lime) when this browser gets them.
 function paintBell() {
   var b = $("c-bell"); if (!b) return;
-  b.hidden = !(C.phase === "ready" && C.me && pushSupported());
+  b.hidden = !(C.phase === "ready" && isCoach() && pushSupported());
   if (b.hidden) return;
   var on = bellOn();
   if (!b.firstChild) { b.innerHTML = BELL_SVG; b.appendChild(h("span", { text: "Notifications" })); }
@@ -1292,6 +1315,200 @@ function renderTemplates(root) {
     root.appendChild(panel);
     root.appendChild(startMenu(k[0], null, null, false));
   });
+}
+
+/* ---------- your page (phase 7): how clients see you ---------- */
+// C.page: the form while it's open. blob/src: a new logo, not saved yet; drop: take the logo off.
+function pageDraft() {
+  if (!C.page) C.page = { name: C.me.name || "", bio: C.me.bio || "", blob: null, src: null, drop: false, busy: false };
+  return C.page;
+}
+function pageFace(P) { return { name: P.name.trim(), bio: P.bio.trim(), logo: P.drop ? null : C.me.logo, src: P.src }; }
+function pageDirty(P) { return P.name.trim() !== (C.me.name || "") || P.bio.trim() !== (C.me.bio || "") || !!P.blob || (P.drop && !!C.me.logo); }
+function forgetPage() { if (C.page && C.page.src) URL.revokeObjectURL(C.page.src); C.page = null; }
+function renderPage(root) {
+  var P = pageDraft(), has = !!(P.src || (!P.drop && C.me.logo));
+  root.appendChild(h("div", { class: "c-head" }, [h("div", {}, [
+    h("h1", { class: "c-h1", text: "Your page" }),
+    h("p", { class: "c-lead", text: "How clients see you: on your invite before they join, then in their app." })
+  ])]));
+  var form = h("form", { class: "c-panel c-editor c-pageform", novalidate: "novalidate" });
+
+  // the logo: pick a picture, see it round straight away
+  var file = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/heic,image/heif", class: "ph-file", tabindex: "-1", "aria-hidden": "true" });
+  var pick = h("button", { class: "btn ghost sm", type: "button", text: has ? "Change logo" : "Upload a logo" });
+  pick.onclick = function () { file.click(); };
+  file.onchange = function () {
+    var f = file.files && file.files[0]; file.value = "";
+    if (!f) return;
+    pick.disabled = true;
+    logoShrink(f).then(function (blob) {
+      if (C.page !== P) return;
+      if (P.src) URL.revokeObjectURL(P.src);
+      P.blob = blob; P.src = URL.createObjectURL(blob); P.drop = false;
+      render();
+    }, function () { pick.disabled = false; toast("That file isn't a picture we can read. Try a JPG or PNG.", 3600); });
+  };
+  var off = has ? h("button", { class: "linkbtn danger", type: "button", text: "Remove logo" }) : null;
+  if (off) off.onclick = function () {
+    if (P.src) URL.revokeObjectURL(P.src);
+    P.blob = null; P.src = null; P.drop = true;
+    render();
+  };
+  form.appendChild(h("div", { class: "c-logo-row" }, [
+    coachFace(P.name || C.me.email, P.drop ? null : C.me.logo, "coach-face lg", P.src),
+    h("div", { class: "c-logo-acts" }, [
+      h("b", { text: "Logo" }),
+      h("small", { class: "c-quiet", text: "A square picture works best: the middle of it is shown, round. Without one, clients see your initials." }),
+      h("div", { class: "c-actions" }, [pick, off]), file
+    ])
+  ]));
+
+  // name and bio; the preview follows as they type
+  var name = h("input", { type: "text", maxlength: "80", autocomplete: "name", value: P.name });
+  var bio = h("textarea", { rows: "4", maxlength: "300", placeholder: "Strength coach in Cairo. I help people train three days a week and eat well without counting every gram." });
+  bio.value = P.bio;
+  var left = h("small", { class: "c-count-left", "aria-live": "polite" });
+  var save = h("button", { class: "btn", type: "submit", text: "Save" });
+  var undo = h("button", { class: "linkbtn", type: "button", text: "Discard changes" });
+  var err = h("p", { class: "form-err", role: "alert" }); err.hidden = true;
+  function sync() {
+    left.textContent = (300 - bio.value.length) + " characters left";
+    save.disabled = P.busy || !pageDirty(P); undo.hidden = !pageDirty(P);
+    paintPreview();
+  }
+  name.oninput = function () { P.name = name.value; sync(); };
+  bio.oninput = function () { P.bio = bio.value; sync(); };
+  undo.onclick = function () { forgetPage(); render(); };
+  form.appendChild(h("label", {}, ["Your name", name, h("small", { class: "c-quiet", text: "Clients see “Coach” before it." })]));
+  form.appendChild(h("label", {}, ["A short bio", bio, left]));
+  form.appendChild(err);
+  form.appendChild(h("div", { class: "c-actions c-pagebar" }, [save, undo]));
+  form.onsubmit = function (e) {
+    e.preventDefault();
+    if (!P.name.trim()) { err.hidden = false; err.textContent = "Enter your name"; name.focus(); return; }
+    err.hidden = true; P.busy = true; save.classList.add("busy"); sync();
+    savePage(P).then(function () { toast("Saved ✓ Clients see it on your invite and in their app.", 3400); render(); }, function (x) {
+      P.busy = false; save.classList.remove("busy"); err.hidden = false; err.textContent = netMsg(x); sync();
+    });
+  };
+
+  // what clients see
+  var preview = h("aside", { class: "c-preview", "aria-label": "Preview" });
+  function paintPreview() {
+    var f = pageFace(P);
+    preview.textContent = "";
+    preview.appendChild(h("small", { class: "c-quiet", text: "Opening your invite link" }));
+    preview.appendChild(h("div", { class: "c-sheet" }, [
+      coachCard(f, "Invited you to train with them"),
+      h("p", { class: "acct-note", text: "Sign in or create an account to join." })
+    ]));
+    preview.appendChild(h("small", { class: "c-quiet", text: "In their app, once they've joined" }));
+    preview.appendChild(h("div", { class: "c-sheet c-sheet-row" }, [coachFace(f.name, f.logo, "acct-av sm", f.src), coachName(f.name)]));
+  }
+  sync();
+  root.appendChild(h("div", { class: "c-page" }, [form, preview]));
+}
+async function savePage(P) {
+  var me = C.me, old = me.logo, path = old, fresh = null;
+  if (P.blob) { fresh = logoName(me.id, P.blob); await coachApi.uploadLogo(fresh, P.blob); path = fresh; }
+  else if (P.drop) path = null;
+  var fields = { full_name: P.name.trim(), bio: P.bio.trim() || null, avatar_path: path };
+  try { await coachApi.saveProfile(me.id, fields); } catch (e) {
+    if (fresh) coachApi.removeLogos([fresh]).catch(function () { });  // the new file has nothing pointing at it
+    throw e;
+  }
+  me.name = fields.full_name; me.bio = fields.bio || ""; me.logo = path;
+  if (old && old !== path) coachApi.removeLogos([old]).catch(function () { });  // best effort: the old logo
+  forgetPage();
+}
+
+/* ---------- admin (phase 7): the platform in numbers, and who coaches ---------- */
+// Numbers only: how many clients and subscriptions each coach has, never who they are or what they logged.
+// Fresh each time the view opens; what was there stays on screen meanwhile.
+function loadAdmin() {
+  if (C.adminLoading) return;
+  C.adminLoading = true;
+  coachApi.overview().then(function (o) { C.admin = o || {}; }, function (e) {
+    if (C.admin && !C.admin.failed) toast(netMsg(e), 3200); else C.admin = { failed: netMsg(e) };
+  }).then(function () { C.adminLoading = false; if (C.view === "admin") render(); });
+}
+function againAdmin() { C.admin = null; render(); loadAdmin(); }
+function renderAdmin(root) {
+  root.appendChild(h("div", { class: "c-head" }, [h("div", {}, [
+    h("h1", { class: "c-h1", text: "Admin" }),
+    h("p", { class: "c-lead", text: "The platform in numbers. Clients' names, logs and payments stay with their coaches." })
+  ])]));
+  var o = C.admin;
+  if (!o) { root.appendChild(h("p", { class: "c-quiet", text: "Loading…" })); return; }
+  if (o.failed) {
+    var again = h("button", { class: "btn", type: "button", text: "Try again" });
+    again.onclick = againAdmin;
+    root.appendChild(h("section", { class: "c-panel c-narrow" }, [h("p", { class: "form-err", text: o.failed }), again]));
+    return;
+  }
+  var list = o.list || [];
+  root.appendChild(h("section", { class: "c-totals", "aria-label": "Totals" }, [
+    [o.accounts, "Accounts"], [o.coaches, "Coaches"], [o.clients, "Clients with a coach"], [money(o.recorded || 0), "Recorded this month"]
+  ].map(function (x) { return h("div", { class: "c-total" }, [h("b", { text: String(x[0] == null ? 0 : x[0]) }), h("small", { text: x[1] })]); })));
+
+  root.appendChild(h("h2", { class: "c-h2" }, ["Coaches", h("span", { class: "c-count", text: String(list.length) })]));
+  var panel = h("div", { class: "c-roster c-coaches" });
+  if (list.length) panel.appendChild(h("div", { class: "arow c-colhead", "aria-hidden": "true" }, ["Coach", "Clients", "Subscriptions", "This month", "Open invites", ""].map(function (t) { return h("div", { class: "c-col", text: t }); })));
+  list.forEach(function (c) { panel.appendChild(adminRow(c)); });
+  if (!list.length) panel.appendChild(h("p", { class: "c-entry c-quiet", text: "No coaches yet. Add the first one below." }));
+  root.appendChild(panel);
+  if (list.some(function (c) { return c.active + c.paused > 0; })) root.appendChild(h("p", { class: "c-quiet c-small", text: "A coach can be stopped once they have no clients left." }));
+  root.appendChild(makeCoachForm());
+}
+function adminRow(c) {
+  var me = c.id === C.me.id, who = c.name || c.email || "Coach";
+  var stop = null;
+  if (c.active + c.paused === 0) {
+    stop = h("button", { class: "btn ghost sm c-danger", type: "button", text: "Stop coaching" });
+    stop.onclick = function () {
+      if (!confirm("Stop " + who + " coaching? Their account stays, as an ordinary one, and their open invite codes stop working.")) return;
+      stop.disabled = true;
+      coachApi.stopCoach(c.id).then(function () {
+        toast(who + " no longer coaches", 3000);
+        if (me) start(); else againAdmin();
+      }, function (x) { stop.disabled = false; toast(netMsg(x), 4200); });
+    };
+  }
+  var tags = [me ? h("span", { class: "pill", text: "You" }) : null, c.admin ? h("span", { class: "pill gold", text: "Admin" }) : null].filter(Boolean);
+  return h("div", { class: "arow" }, [
+    h("div", { class: "c-col c-who" }, [
+      coachFace(who, null, "acct-av"),
+      h("div", {}, [h("b", { text: who, translate: "no" }), c.name && c.email ? h("small", { text: c.email, translate: "no" }) : null, tags.length ? h("span", { class: "c-tags" }, tags) : null])
+    ]),
+    h("div", { class: "c-col" }, [h("b", { text: String(c.active) }), h("small", { text: c.paused ? "active, " + c.paused + " paused" : "active" })]),
+    h("div", { class: "c-col" }, [h("b", { text: String(c.paying) }), h("small", { text: c.ended ? "paid up, " + c.ended + " ended" : "paid up" })]),
+    h("div", { class: "c-col" }, [h("b", { text: money(c.recorded || 0) }), h("small", { text: "recorded" })]),
+    h("div", { class: "c-col" }, [h("b", { text: String(c.invites) }), h("small", { text: c.invites === 1 ? "code" : "codes" })]),
+    h("div", { class: "c-col c-act" }, [stop])
+  ]);
+}
+function makeCoachForm() {
+  var em = h("input", { type: "email", autocomplete: "off", autocapitalize: "none", spellcheck: "false", placeholder: "coach@example.com", "aria-label": "Their email" });
+  var go = h("button", { class: "btn", type: "submit", text: "Make coach" });
+  var err = h("p", { class: "form-err", role: "alert" }); err.hidden = true;
+  var form = h("form", { class: "c-panel c-addcoach", novalidate: "novalidate" }, [
+    h("h3", { class: "c-h3", text: "Add a coach" }),
+    h("p", { class: "c-quiet", text: "They create an account in the Gym Log app first, with their own email and password. Then enter that email here. They sign in to this page with the same account." }),
+    h("div", { class: "c-start-row" }, [em, go]), err
+  ]);
+  form.onsubmit = function (e) {
+    e.preventDefault();
+    var v = em.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { err.hidden = false; err.textContent = "Enter the email they signed up with"; em.focus(); return; }
+    err.hidden = true; go.disabled = true; go.classList.add("busy");
+    coachApi.makeCoach(v).then(function (r) {
+      var who = (r && r.name) || v;
+      toast(r && r.already ? who + " is already a coach" : who + " is a coach now ✓", 3600);
+      if (r && r.id === C.me.id && !isCoach()) start(); else againAdmin();
+    }, function (x) { go.disabled = false; go.classList.remove("busy"); err.hidden = false; err.textContent = netMsg(x); });
+  };
+  return form;
 }
 
 /* ---------- invites ---------- */

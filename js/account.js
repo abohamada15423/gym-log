@@ -10,15 +10,28 @@ function validEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
 function privacyHref() { return "privacy.html" + (state.lang === "ar" ? "#ar" : ""); }
 
 /* ---------- header: sync status and the account / coach button ---------- */
+var LOGO_FAILED = {};  // logo addresses that didn't load: initials instead, until the page reloads
 function paintAccount() {
   var b = $("acct"), cn = $("coach-name"); if (!b) return;
   var coach = sync.uid ? sync.coach : null;
   b.classList.toggle("on", !!sync.uid);
   b.classList.toggle("has-coach", !!coach);
   b.setAttribute("translate", "no");
-  if (coach) b.textContent = initials(coach.name) || "C";
-  else if (sync.uid) b.textContent = initials(sync.name || sync.email) || "✓";
-  else b.innerHTML = ICON_USER;
+  // with a coach, the button is their face: their logo (phase 7), or their initials
+  var logo = coach ? coachLogoUrl(coach.logo) : null;
+  if (logo && LOGO_FAILED[logo]) logo = null;
+  b.classList.toggle("has-logo", !!logo);
+  if (logo) {
+    if (b.getAttribute("data-logo") !== logo) {
+      b.setAttribute("data-logo", logo); b.textContent = "";
+      b.appendChild(h("img", { src: logo, alt: "", draggable: "false", onerror: function () { LOGO_FAILED[logo] = 1; paintAccount(); } }));
+    }
+  } else {
+    b.removeAttribute("data-logo");
+    if (coach) b.textContent = initials(coach.name) || "C";
+    else if (sync.uid) b.textContent = initials(sync.name || sync.email) || "✓";
+    else b.innerHTML = ICON_USER;
+  }
   if (cn) {
     // the coach's name opens the comments; a lime dot says something new is waiting there
     var unread = coach ? syncUnread() : 0;
@@ -58,10 +71,26 @@ function fillAccountCard(card) {
   }
   card.appendChild(whoBlock());
   card.appendChild(h("div", { class: "acct-sync", "data-phase": sync.ask ? "ask" : syncRt.phase, text: syncLine() }));
-  if (sync.coach) card.appendChild(h("div", { class: "acct-coach" }, [h("span", { class: "acct-av sm", "aria-hidden": "true", text: initials(sync.coach.name) || "C" }), sync.coach.name ? "Coach " + sync.coach.name : "Your coach"]));
+  if (sync.coach) card.appendChild(coachLine(sync.coach));
   var open = h("button", { class: "btn ghost", type: "button", text: sync.ask ? "Choose" : "Account settings" });
   open.onclick = function () { openAccount(sync.ask ? "upload" : "account"); };
   card.appendChild(open);
+}
+// Your coach, in one line: their face (logo or initials) and name.
+function coachLine(c) {
+  return h("div", { class: "acct-coach" }, [coachFace(c.name, c.logo, "acct-av sm"), c.name ? "Coach " + c.name : "Your coach"]);
+}
+// Who sent the invite, at the top of the sign-in, sign-up and join sheets: the plain line straight away,
+// then the coach's card (logo, name, bio) once the server says who it is (phase 7).
+function inviteHead(code, plain, after) {
+  var box = h("div", { class: "inv-head" }, [h("p", { class: "acct-note", text: plain })]);
+  syncInviteInfo(code).then(function (info) {
+    if (!info) return;
+    box.textContent = "";
+    box.appendChild(coachCard(info, "Invited you to train with them"));
+    box.appendChild(h("p", { class: "acct-note", text: after }));
+  }, function () { });
+  return box;
 }
 function whoBlock() {
   var main = sync.name || sync.email || "Signed in";
@@ -306,7 +335,8 @@ function joinForm(code, done) {
 
 var ACCT_VIEWS = {
   signin: function (body, opts) {
-    body.appendChild(h("p", { class: "acct-note", text: sync.invite ? "Your coach invited you. Sign in or create an account to join." : "Sign in to save your log online and share it with your coach." }));
+    body.appendChild(sync.invite ? inviteHead(sync.invite, "Your coach invited you. Sign in or create an account to join.", "Sign in or create an account to join.")
+      : h("p", { class: "acct-note", text: "Sign in to save your log online and share it with your coach." }));
     body.appendChild(segTabs("signin"));
     var em = emailIn(opts.email), pw = passIn("current-password"), err = formErr();
     var go = h("button", { class: "btn", type: "submit", text: "Sign in" });
@@ -331,7 +361,7 @@ var ACCT_VIEWS = {
   },
 
   signup: function (body, opts) {
-    if (sync.invite) body.appendChild(h("p", { class: "acct-note", text: "Your coach invited you. Sign in or create an account to join." }));
+    if (sync.invite) body.appendChild(inviteHead(sync.invite, "Your coach invited you. Sign in or create an account to join.", "Sign in or create an account to join."));
     body.appendChild(segTabs("signup"));
     var nm = h("input", { type: "text", autocomplete: "name", maxlength: "80" });
     var em = emailIn(opts.email), pw = passIn("new-password"), err = formErr();
@@ -470,7 +500,9 @@ var ACCT_VIEWS = {
 
     body.appendChild(h("h3", { class: "acct-h", text: "Your coach" }));
     if (sync.coach) {
-      body.appendChild(h("div", { class: "acct-coach" }, [h("span", { class: "acct-av sm", "aria-hidden": "true", text: initials(sync.coach.name) || "C" }), sync.coach.name ? "Coach " + sync.coach.name : "Your coach"]));
+      body.appendChild(coachLine(sync.coach));
+      // under their name (the box keeps the indent on the page's side; the words take their own direction)
+      if (sync.coach.bio) body.appendChild(h("div", { class: "acct-coach-bio" }, [h("p", { translate: "no", dir: "auto", text: sync.coach.bio })]));
       body.appendChild(h("p", { class: "acct-note", text: "Your coach sees your workouts, meals, check-ins and habits." }));
       var sub = mySub();
       if (sub) body.appendChild(h("p", { class: "acct-sub" + (sub.ended ? " ended" : ""), text: sub.ended ? "Your coaching ended on " + mbDay(sub.until) + ". Your coach sees what you logged until then." : "Paid until " + mbDay(sub.until) }));
@@ -507,7 +539,7 @@ var ACCT_VIEWS = {
   },
 
   join: function (body, opts) {
-    body.appendChild(h("p", { class: "acct-note", text: "Your coach invited you. Join to share your training and meals with them." }));
+    body.appendChild(inviteHead(opts.code, "Your coach invited you. Join to share your training and meals with them.", "Join to share your training and meals with them."));
     body.appendChild(joinForm(opts.code, function () { closeModal(); }));
   },
 

@@ -80,6 +80,11 @@ function fakeServer() {
         s.links.push({ coach_id: COACH, client_id: s.session.id, status: 'active' });
         return { data: COACH, error: null, status: 200 };
       }
+      if (name === 'invite_info') {
+        if (s.offline) return down();
+        const ok = args.p_code === 'ABCDEFGHJKMN' && !s.links.some(l => l.client_id === (s.session || {}).id);
+        return { data: ok ? [{ coach_name: 'Ahmed Hassan', bio: 'Strength coach in Cairo.\nThree days a week.', logo: COACH + '/logo-abc1234567890def.webp' }] : [], error: null, status: 200 };
+      }
       if (name === 'delete_my_account') { names.forEach(n => s.rows(n).forEach(r => { if (r.client_id === s.session.id) tables[n].delete(pk(n, r)); })); return { data: null, error: null, status: 204 }; }
       if (name === 'mark_comments_read') {
         if (s.offline) return down();
@@ -843,4 +848,57 @@ test('the subscription with the coach: paid until in the account sheet, and a ba
   a.w.closeModal();
   a.w.state.lang = 'ar'; a.w.applyLang(); a.w.render(); await a.tick();
   assert.match(a.doc.querySelector('.sub-banner').textContent, /اشتراكك مع الكابتن خلص/);
+});
+
+// ---- phase 7: who the coach is --------------------------------------------------------------------
+const LOGO = 'https://wacekcjwcvcawdptbgwv.supabase.co/storage/v1/object/public/coach-logos/' + COACH + '/logo-abc1234567890def.webp';
+
+test("an invite shows who sent it before signing up: the coach's logo, name and bio", async t => {
+  const server = fakeServer(), a = app(t, server, { query: '?invite=abcd-efgh-jkmn' });
+  await a.settle();
+  const card = a.doc.querySelector('#mbox .coach-card');
+  assert.ok(card, 'the card replaces the plain line');
+  assert.equal(card.textContent, 'Coach Ahmed HassanInvited you to train with themStrength coach in Cairo.\nThree days a week.');
+  assert.equal(card.querySelector('img').getAttribute('src'), LOGO);
+  assert.equal(card.querySelector('.coach-bio').getAttribute('translate'), 'no');
+  assert.match(a.doc.getElementById('mbox').textContent, /Sign in or create an account to join\./);
+  // in Arabic: the words are translated, the coach's own words are not
+  a.w.state.lang = 'ar'; a.w.applyLang(); await a.tick();
+  assert.match(card.textContent, /الكابتن Ahmed Hassan.*دعاك للتمرن معه.*Strength coach in Cairo\./s);
+  // a code that doesn't work, or no connection: the plain line, as before
+  const off = fakeServer(); off.offline = true;
+  for (const [srv, q] of [[fakeServer(), '?invite=ZZZZZZZZZZZZ'], [off, '?invite=abcd-efgh-jkmn']]) {
+    const b = app(t, srv, { query: q });
+    await b.settle();
+    assert.equal(b.doc.querySelector('#mbox .coach-card'), null, q);
+    assert.match(b.doc.getElementById('mbox').textContent, /Your coach invited you\. Sign in or create an account to join\./, q);
+  }
+});
+
+test("the coach's logo in the header and the account sheet, with their bio; initials when it doesn't load", async t => {
+  const { server, a } = await coached(t);
+  const btn = a.doc.getElementById('acct');
+  assert.equal(btn.textContent, 'AH', 'no logo yet: initials');
+  server.profiles.set(COACH, { id: COACH, full_name: 'Ahmed Hassan', role: 'coach', bio: 'Strength coach in Cairo.', avatar_path: COACH + '/logo-abc1234567890def.webp' });
+  await a.w.syncNow({ pull: true }); await a.settle();
+  assert.deepEqual([a.w.sync.coach.bio, a.w.sync.coach.logo], ['Strength coach in Cairo.', COACH + '/logo-abc1234567890def.webp']);
+  assert.ok(btn.classList.contains('has-logo') && btn.classList.contains('has-coach'));
+  assert.equal(btn.querySelector('img').getAttribute('src'), LOGO);
+  btn.click(); await a.tick();
+  const line = a.doc.querySelector('#mbox .acct-coach');
+  assert.equal(line.textContent, 'Coach Ahmed Hassan');
+  assert.equal(line.querySelector('img').getAttribute('src'), LOGO);
+  assert.equal(a.doc.querySelector('#mbox .acct-coach-bio').textContent, 'Strength coach in Cairo.');
+  a.w.closeModal();
+  // a picture the server can't give: the coach's initials, and no retrying on every sync
+  btn.querySelector('img').dispatchEvent(new a.w.Event('error'));
+  assert.equal(btn.textContent, 'AH');
+  assert.ok(!btn.classList.contains('has-logo'));
+  await a.w.syncNow({ pull: true }); await a.settle();
+  assert.equal(btn.querySelector('img'), null);
+  // only the bucket's own file names make an address
+  server.profiles.set(COACH, { id: COACH, full_name: 'Ahmed Hassan', role: 'coach', avatar_path: 'https://example.com/tracker.png' });
+  await a.w.syncNow({ pull: true }); await a.settle();
+  assert.equal(btn.querySelector('img'), null);
+  assert.equal(a.w.coachLogoUrl('https://example.com/tracker.png'), null);
 });

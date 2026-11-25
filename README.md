@@ -53,7 +53,7 @@ Tap the round button at the top right, or **Sign in or create account** on the P
 - Each save goes to the phone first. With an account, what changed uploads a moment later. Offline, it waits and uploads when the connection is back. The header says which: *Saved online ✓*, *Saved on this phone ✓*, or *Offline · will upload later*.
 - Changes from your other phones arrive when the app opens, comes back to the front, or every few minutes. If the same thing was edited in two places, the newest edit wins.
 - The first sign-in on a phone that already has data asks whether to add it to the account or keep it on the phone only.
-- **Join your coach** with the 12-character code they give you, or by opening their invite link (`…/gym-log/?invite=CODE`). Your coach's name shows in the header. A program from your coach becomes your active program, named under the day tabs on Train. Their meal plan sets your daily calories and protein, and its meals show on the Meals tab under **From your coach**. The app tells you when your coach sends or changes either one.
+- **Join your coach** with the 12-character code they give you, or by opening their invite link (`…/gym-log/?invite=CODE`). The link shows who invited you, with their logo and a short bio, before you create an account. Your coach's name shows in the header, and their logo on the round account button. A program from your coach becomes your active program, named under the day tabs on Train. Their meal plan sets your daily calories and protein, and its meals show on the Meals tab under **From your coach**. The app tells you when your coach sends or changes either one.
 - **Comments with your coach:** tap your coach's name in the header. A lime dot there means something new. Write about anything, or about a workout (in its history), a day of meals (on the Meals tab) or a check-in (on Progress). Comments on those show up under them too. Written offline, a comment waits and goes up with the next sync.
 - **Your subscription:** if your coach records your payments, your account settings show when it's paid until, and the Train tab tells you 3 days before it ends and once it has.
 - **Notifications** (Plan tab → Notifications): your coach's comments, a new or changed program or meal plan, and **training-day reminders** on the days and at the time you choose, unless you've already trained. On iPhone they work once the app is on the Home Screen.
@@ -63,7 +63,7 @@ How it works is in [docs/coach-plan.md](docs/coach-plan.md) (section 5) and at t
 
 ## Coach dashboard
 
-Coaches open **coach.html** (`…/gym-log/coach.html`), or **Open the coach dashboard** in the app's account settings. It's made for a laptop or tablet and works on a phone, in English or Arabic. A coach account is a normal app account that the app's owner turns into a coach account (see `supabase/README.md`).
+Coaches open **coach.html** (`…/gym-log/coach.html`), or **Open the coach dashboard** in the app's account settings. It's made for a laptop or tablet and works on a phone, in English or Arabic. A coach account is a normal app account that an admin turns into a coach account on the **Admin** page.
 
 - **Clients:** one row per client with when they were last active, the last 7 days as tally marks (one per planned workout, lime when done), average daily protein against their target, and their weight change over about two weeks. Clients who need attention come first under **Needs you**, with the reasons:
   - no workout for 5 days or more (counted from when they joined if they haven't trained yet)
@@ -85,6 +85,9 @@ Coaches open **coach.html** (`…/gym-log/coach.html`), or **Open the coach dash
   - Once a subscription ends, the client keeps logging, but the coach sees only what was logged up to the last paid day, and can't send programs, meal plans or comments until the next payment. The database enforces this, not just the page.
   - Both get a notification 3 days before it ends, and the day after.
 
+- **Your page:** your name, a short bio (up to 300 characters) and your logo, beside a preview of what clients see. They see them when they open your invite link, before they have an account, and then in their app. The logo is cut to the middle square and made small in the browser, then saved in a public folder that only you can write to.
+- **Admin** (for the platform's owner, who may coach too or not): the platform in numbers, and for each coach their clients (active and paused), subscriptions (paid up and ended), what they recorded this month and their open invites. Never a client's name, log or payments. **Add a coach** by the email of their app account; **Stop coaching** once a coach has no clients left (their account stays, as an ordinary one).
+
 Coaches only ever read their clients' data; the database doesn't let them change it. The dashboard signs in separately from the app, so signing in there doesn't sign the app in on the same device.
 
 ## Arabic
@@ -102,6 +105,7 @@ There is no build step. `index.html` holds the page markup, `css/app.css` the st
 | `js/data.js` | Built-in programs, exercise library, training systems, food presets |
 | `js/core.js` | App state, the `h()` DOM helper, date and number helpers, toast |
 | `js/config.js` | The Supabase project's address, public key and the public key for notifications (VAPID) |
+| `js/coach-card.js` | A coach as clients see them: their logo (or initials), name and bio; making a picture into a logo (app and coach page) |
 | `js/comments.js` | Comments between client and coach, drawn the same way in the app and on the coach page |
 | `js/push.js` | Notifications in this browser: permission, the push subscription, what a tap opens |
 | `js/progress-photos.js` | Progress photos: the store on the phone, shrinking a photo, the check-in slots, thumbnails and the before-and-after view (app and coach page) |

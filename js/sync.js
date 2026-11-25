@@ -264,7 +264,7 @@ var syncApi = {
     if (since) q = q.gt("updated_at", since);
     return q.order("updated_at", { ascending: true }).order(order, { ascending: true }).range(from, from + n - 1);
   },
-  profile: function (id) { return sb.from("profiles").select("id,full_name,role").eq("id", id).maybeSingle(); },
+  profile: function (id) { return sb.from("profiles").select("id,full_name,role,bio,avatar_path").eq("id", id).maybeSingle(); },
   coachLink: function (uid) { return sb.from("coach_clients").select("coach_id,status,paid_until").eq("client_id", uid).neq("status", "archived").limit(1); },
   myPayments: function (uid) { return sb.from("payments").select("id,amount,method,days,starts_on,ends_on").eq("client_id", uid).is("deleted_at", null).order("ends_on", { ascending: false }).limit(24); },
   leaveCoach: function (uid, coachId) { return sb.from("coach_clients").update({ status: "archived" }).eq("client_id", uid).eq("coach_id", coachId); },
@@ -734,7 +734,8 @@ async function pullPeople() {
     if (row) {
       var p = await syncApi.profile(row.coach_id);
       if (p.error) syncCheck(p);
-      coach = { id: row.coach_id, status: row.status, name: (p.data && p.data.full_name) || null, paidUntil: row.paid_until || null };
+      var cp = p.data || {};
+      coach = { id: row.coach_id, status: row.status, name: cp.full_name || null, paidUntil: row.paid_until || null, bio: cp.bio || null, logo: cp.avatar_path || null };
     }
     if (stableStr(coach) !== stableStr(sync.coach)) changed = true;
     sync.coach = coach;
@@ -984,6 +985,20 @@ async function syncJoinCoach(code) {
   await pullPeople();
   await syncNow({ pull: true });
   return sync.coach;
+}
+// Who sent an invite (phase 7): the coach's name, bio and logo, asked of the server before signing up.
+// null when the code doesn't work (used, expired, made up) or the server can't be reached.
+async function syncInviteInfo(code) {
+  code = String(code || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (code.length !== 12) return null;
+  var known = syncRt.inviteInfo;
+  if (known && known.code === code) return known.info;
+  await sbReady();
+  var r = await syncApi.rpc("invite_info", { p_code: code });
+  if (r.error) return null;
+  var row = (r.data || [])[0], info = row ? { name: row.coach_name || null, bio: row.bio || null, logo: row.logo || null } : null;
+  syncRt.inviteInfo = { code: code, info: info };
+  return info;
 }
 async function syncLeaveCoach() {
   await requireUser();

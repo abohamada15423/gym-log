@@ -711,3 +711,92 @@ dbTest('coming back through a new invite starts afresh: an old subscription does
   assert.equal(await paidUntil(), null);
   assert.ok((await rows(coach, 'select id from public.workout_sessions where client_id = $1', [alice.id])).length > 0, 'the coach sees her log again');
 });
+
+// ---- phase 7: more than one coach (0006_platform.sql) -----------------------------------------
+let owner, zeina;
+
+dbTest("a coach's page: a short bio and a logo from their own folder, which visitors holding a working code can see", async () => {
+  const logo = `${coach.id}/logo-k7Qz2.webp`;
+  zeina = await signUp('zeina@example.com', { full_name: 'Zeina' });  // a second coach (coach2 left in phase 4)
+  await db.query("update public.profiles set role = 'coach' where id = $1", [zeina.id]);
+  await as(coach, 'update public.profiles set bio = $1, avatar_path = $2 where id = $3', ['Strength coach in Cairo', logo, coach.id]);
+  await assert.rejects(as(coach, 'update public.profiles set bio = $1 where id = $2', ['x'.repeat(301), coach.id]), /profiles_bio/);
+  // the logo is a file the app named, in their own folder, nothing else
+  for (const bad of [`${zeina.id}/logo-a.webp`, `${coach.id}/../x/logo-a.webp`, `${coach.id}/logo-a.gif`, `${coach.id}/photo.webp`, 'https://example.com/a.png']) {
+    await assert.rejects(as(coach, 'update public.profiles set avatar_path = $1 where id = $2', [bad, coach.id]), /profiles_avatar_path/, bad);
+  }
+  // the bucket: public, small pictures; coaches write to their own folder only, clients not at all
+  const b = (await db.query("select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'coach-logos'")).rows[0];
+  assert.deepEqual([b.public, Number(b.file_size_limit), b.allowed_mime_types], [true, 524288, ['image/webp', 'image/jpeg', 'image/png']]);
+  await as(coach, "insert into storage.objects (bucket_id, name) values ('coach-logos', $1)", [logo]);
+  await assert.rejects(as(coach, "insert into storage.objects (bucket_id, name) values ('coach-logos', $1)", [`${zeina.id}/logo-b.webp`]), DENIED);
+  await assert.rejects(as(alice, "insert into storage.objects (bucket_id, name) values ('coach-logos', $1)", [`${alice.id}/logo-c.webp`]), DENIED);
+  // (no WHERE: so only the delete and update rules decide, not the one for listing)
+  assert.equal((await as(zeina, 'delete from storage.objects')).rowCount, 0);
+  assert.equal((await as(zeina, 'update storage.objects set created_at = now()')).rowCount, 0);
+  assert.equal((await rows(zeina, "select name from storage.objects where bucket_id = 'coach-logos'")).length, 0);
+  assert.deepEqual((await rows(coach, "select name from storage.objects where bucket_id = 'coach-logos'")).map(r => r.name), [logo]);
+  // her coach's page, for the client
+  assert.deepEqual(await rows(alice, 'select bio, avatar_path from public.profiles where id = $1', [coach.id]), [{ bio: 'Strength coach in Cairo', avatar_path: logo }]);
+  // and for a visitor with a code: the coach's name, bio and logo, nothing more; a code that doesn't work shows nothing
+  const fresh = (await rows(coach, 'select public.create_invite() as code'))[0].code;
+  assert.deepEqual(await rows('anon', 'select * from public.invite_info($1)', [' ' + fresh.toLowerCase() + ' ']), [{ coach_name: 'Coach Karim', bio: 'Strength coach in Cairo', logo }]);
+  assert.deepEqual(await rows('anon', 'select * from public.invite_info($1)', [code]), [], 'used');
+  assert.deepEqual(await rows('anon', "select * from public.invite_info('ZZZZZZZZZZZZ')"), [], 'made up');
+  await db.query("update public.invites set expires_at = now() - interval '1 minute' where code = $1", [fresh]);
+  assert.deepEqual(await rows('anon', 'select * from public.invite_info($1)', [fresh]), [], 'expired');
+  await assert.rejects(as('anon', 'select bio from public.profiles'), /permission denied/);
+  // that is the one thing a visitor can call
+  const open = await db.query(`select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                               where n.nspname in ('public', 'private') and has_function_privilege('anon', p.oid, 'execute')
+                                 and has_schema_privilege('anon', n.oid, 'usage') and p.prorettype <> 'trigger'::regtype`);
+  assert.deepEqual(open.rows.map(r => r.proname), ['invite_info']);
+});
+
+dbTest('admins are marked by hand, and see the platform in numbers: never a client, their log or their payments', async () => {
+  await assert.rejects(as(alice, 'update public.profiles set is_admin = true where id = $1', [alice.id]), /permission denied/);
+  await assert.rejects(as(coach, 'select public.admin_overview()'), /Admins only/);
+  await assert.rejects(as('anon', 'select public.admin_overview()'), /permission denied/);
+  await assert.rejects(as(coach, 'select private.is_admin()'), /permission denied/);
+  owner = await signUp('owner@example.com', { full_name: 'Mohamed' });
+  await db.query('update public.profiles set is_admin = true where id = $1', [owner.id]);  // by hand, in the SQL editor
+  await setPaid(addDays(await cairoToday(), 5));
+  const o = (await rows(owner, 'select public.admin_overview() as o'))[0].o;
+  assert.equal(o.accounts, (await db.query('select count(*)::int as n from auth.users')).rows[0].n);
+  assert.equal(o.coaches, 2);
+  const k = o.list.find(c => c.id === coach.id);
+  // this month: 1,500, then 4,000 that was taken back, then 1,500 after the subscription ended
+  assert.deepEqual(k, { id: coach.id, name: 'Coach Karim', email: 'coach@example.com', admin: false, active: 1, paused: 0, paying: 1, ended: 0, recorded: 3000, invites: 0 });
+  assert.equal(o.recorded, 3000);
+  assert.deepEqual(o.list.map(c => c.name), ['Coach Karim', 'Zeina'], 'by name');
+  const all = JSON.stringify(o);
+  for (const secret of [alice.id, 'alice@example.com', 'Alice', 'November', 'instapay']) assert.ok(!all.includes(secret), secret);
+});
+
+dbTest('an admin makes a coach by email, and stops one only once they have no clients', async () => {
+  for (const f of ["select public.admin_make_coach('bob@example.com')", 'select public.admin_stop_coach($1)']) {
+    await assert.rejects(as(coach, f, f.includes('$1') ? [zeina.id] : []), /Admins only/);
+  }
+  await assert.rejects(as(owner, "select public.admin_make_coach('nobody@example.com')"), /No account with that email/);
+  await assert.rejects(as(owner, "select public.admin_make_coach(' ALICE@example.com ')"), /client of a coach right now/);
+  const dina = await signUp('dina@example.com', { full_name: 'Dina' });
+  assert.deepEqual((await rows(owner, "select public.admin_make_coach(' Dina@Example.com ') as r"))[0].r, { id: dina.id, name: 'Dina', already: false });
+  assert.deepEqual((await rows(owner, "select public.admin_make_coach('dina@example.com') as r"))[0].r, { id: dina.id, name: 'Dina', already: true });
+  // she coaches now: invites, a client
+  const omar = await signUp('omar@example.com');
+  const joined = (await rows(dina, 'select public.create_invite() as code'))[0].code;
+  await as(omar, 'select public.accept_invite($1)', [joined]);
+  const open = (await rows(dina, 'select public.create_invite() as code'))[0].code;
+  const dinaIn = async () => { const d = (await rows(owner, 'select public.admin_overview() as o'))[0].o.list.find(c => c.id === dina.id); return d && [d.active, d.paused, d.paying, d.ended, d.invites]; };
+  assert.deepEqual(await dinaIn(), [1, 0, 0, 0, 1]);
+  await assert.rejects(as(owner, 'select public.admin_stop_coach($1)', [dina.id]), /still have clients/);
+  // once her client has left: her open invites go, the used one stays on record, her account stays
+  await as(omar, "update public.coach_clients set status = 'archived'");
+  assert.deepEqual(await dinaIn(), [0, 0, 0, 0, 1], 'a client who left is not counted');
+  await as(owner, 'select public.admin_stop_coach($1)', [dina.id]);
+  assert.equal((await db.query('select role from public.profiles where id = $1', [dina.id])).rows[0].role, 'client');
+  assert.deepEqual((await db.query('select code from public.invites where coach_id = $1', [dina.id])).rows.map(r => r.code), [joined]);
+  assert.deepEqual(await rows('anon', 'select * from public.invite_info($1)', [open]), []);
+  await assert.rejects(as(dina, 'select public.create_invite()'), /Only coaches/);
+  assert.ok(!(await rows(owner, 'select public.admin_overview() as o'))[0].o.list.some(c => c.id === dina.id));
+});
