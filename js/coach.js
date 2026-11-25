@@ -27,7 +27,7 @@ function save() { }
 // edit: the program or meal plan being written ({ kind, clientId (null = template), rowId, draft, dirty }).
 // templates: the coach's own programs and meal plans with no client, loaded when first needed.
 var C = { phase: "loading", me: null, clients: [], byId: {}, view: "list", id: null, tab: "summary", client: null, error: null, tallied: false, edit: null, templates: null };
-var CLIENT_TABS = [["summary", "Summary"], ["comments", "Comments"], ["workouts", "Workouts"], ["meals", "Meals"], ["body", "Body"], ["program", "Program"], ["mealplan", "Meal plan"], ["notes", "Notes"]];
+var CLIENT_TABS = [["summary", "Summary"], ["comments", "Comments"], ["workouts", "Workouts"], ["meals", "Meals"], ["body", "Body"], ["program", "Program"], ["mealplan", "Meal plan"], ["payments", "Payments"], ["notes", "Notes"]];
 
 /* ---------- talking to the server ---------- */
 // The coach page has its own sign-in, kept apart from the app's, so signing in here never links the
@@ -53,7 +53,7 @@ var coachApi = window.coachApi || {
   signIn: function (email, pw) { return coachDb().auth.signInWithPassword({ email: email, password: pw }).then(function (r) { if (r.error) throw r.error; return r.data.user; }); },
   signOut: function () { return coachDb().auth.signOut({ scope: "local" }); },
   profile: function (id) { return coachDb().from("profiles").select("id,full_name,role").eq("id", id).maybeSingle().then(must); },
-  links: function (me) { return coachDb().from("coach_clients").select("client_id,status,started_at").eq("coach_id", me).neq("status", "archived").then(must); },
+  links: function (me) { return coachDb().from("coach_clients").select("client_id,status,started_at,paid_until").eq("coach_id", me).neq("status", "archived").then(must); },
   profiles: function (ids) { return coachDb().from("profiles").select("id,full_name").in("id", ids).then(must); },
   // rows of a client table for these clients, newest first, all pages
   rows: async function (table, ids, cols, from) {
@@ -102,6 +102,14 @@ var coachApi = window.coachApi || {
       return out;
     });
   },
+  // subscriptions (phase 6): payments are made outside the app and recorded here
+  payments: function (id) {
+    return coachDb().from("payments").select("id,amount,method,days,starts_on,ends_on,note,created_at").eq("client_id", id).is("deleted_at", null)
+      .order("ends_on", { ascending: false }).order("created_at", { ascending: false }).then(must);
+  },
+  monthPayments: function (me, since) { return coachDb().from("payments").select("amount,created_at").eq("coach_id", me).is("deleted_at", null).gte("created_at", since).then(must); },
+  recordPayment: function (id, amount, days, method, note) { return coachDb().rpc("record_payment", { p_client: id, p_amount: amount, p_days: days, p_method: method, p_note: note || null }).then(must); },
+  withdrawPayment: function (paymentId) { return coachDb().rpc("withdraw_payment", { p_payment: paymentId }).then(must); },
   // notifications in this browser
   savePush: function (row) { return coachDb().from("push_subscriptions").upsert(row, { onConflict: "user_id,endpoint" }).then(must); },
   dropPush: function (me, endpoint) { return coachDb().from("push_subscriptions").delete().eq("user_id", me).eq("endpoint", endpoint).then(must); }
@@ -233,6 +241,8 @@ async function start() {
 async function loadRoster() {
   var links = await coachApi.links(C.me.id), ids = links.map(function (l) { return l.client_id; }), now = today();
   var people = {}, got = [[], [], [], [], [], [], [], []];
+  var month = new Date(); month.setDate(1); month.setHours(0, 0, 0, 0);
+  C.month = await coachApi.monthPayments(C.me.id, month.toISOString()).catch(function () { return null; });
   if (ids.length) {
     (await coachApi.profiles(ids)).forEach(function (p) { people[p.id] = p; });
     got = await Promise.all([
@@ -256,7 +266,9 @@ async function loadRoster() {
     };
     var name = people[id] && people[id].full_name, box = inbox[id] || {};
     var c = { id: id, name: name || "Client", status: l.status, startedAt: l.started_at, sum: clientSummary(d, now), unread: box.unread || 0, waiting: !!box.waiting, lastComment: box.last_at || null };
+    c.paidUntil = l.paid_until || null; c.sub = subState(c.paidUntil, now);
     commentFlag(c);
+    subFlag(c);
     return c;
   });
   C.byId = {};
@@ -271,13 +283,13 @@ async function loadClient(id) {
     coachApi.rows("habit_days", [id], "date,data", from),
     coachApi.rows("client_settings", [id], "key,value", null),
     coachApi.plans([id]), coachApi.programs([id]),
-    coachApi.note(C.me.id, id), coachApi.comments(id)
+    coachApi.note(C.me.id, id), coachApi.comments(id), coachApi.payments(id)
   ]);
   var prog = newest(got[6]), plan = newest(got[5]);
   return {
     id: id, state: toState({ sessions: got[0], food: got[1], body: got[2], habits: got[3], settings: got[4] }),
     plan: plan, program: prog && Array.isArray(prog.days) ? { name: prog.name, days: prog.days } : null,
-    programRow: prog, planRow: plan, note: got[7] || "", comments: (got[8] || []).map(cmRow)
+    programRow: prog, planRow: plan, note: got[7] || "", comments: (got[8] || []).map(cmRow), payments: got[9] || []
   };
 }
 
@@ -368,7 +380,7 @@ function weekTally(done, planned) {
 }
 function flagList(flags) { return h("ul", { class: "c-flags" }, flags.map(function (f) { return h("li", { text: f.text }); })); }
 function clientRow(c) {
-  var s = c.sum, paused = c.status === "paused", flags = paused ? [] : s.flags;
+  var s = c.sum, paused = c.status === "paused", ended = subEnded(c), flags = paused || ended ? [] : s.flags;
   var row = h("a", { class: "crow" + (flags.length ? " needs" : ""), href: "#client=" + c.id });
   var weekLabel = s.planned ? s.done + " of " + s.planned : s.done === 1 ? "1 workout" : s.done + " workouts";
   var pro = h("div", { class: "c-col c-pro" });
@@ -397,9 +409,9 @@ function clientRow(c) {
     ]),
     h("div", { class: "c-col c-week" }, [weekTally(s.done, s.planned), h("small", { text: weekLabel })]),
     pro, kg,
-    h("div", { class: "c-col c-flagcol" }, [flags.length ? flagList(flags) : h("small", { class: "c-ok", text: paused ? "Paused" : "On track" })])
+    h("div", { class: "c-col c-flagcol" }, [flags.length ? flagList(flags) : ended ? h("small", { class: "c-bad", text: endedText(c.sub) }) : h("small", { class: "c-ok", text: paused ? "Paused" : "On track" })])
   ].forEach(function (x) { row.appendChild(x); });
-  row.setAttribute("aria-label", c.name + ". " + (flags.length ? flags.map(function (f) { return trText(f.text); }).join(". ") : trText(paused ? "Paused" : "On track")));
+  row.setAttribute("aria-label", c.name + ". " + (flags.length ? flags.map(function (f) { return trText(f.text); }).join(". ") : trText(ended ? endedText(c.sub) : paused ? "Paused" : "On track")));
   return row;
 }
 function rosterGroup(title, list, note, heads) {
@@ -415,15 +427,20 @@ function rosterGroup(title, list, note, heads) {
 function renderRoster(root) {
   var invite = h("button", { class: "btn", type: "button", text: "Invite a client" });
   invite.onclick = openInvites;
-  var active = C.clients.filter(function (c) { return c.status !== "paused"; }), paused = C.clients.filter(function (c) { return c.status === "paused"; });
+  var paused = C.clients.filter(function (c) { return c.status === "paused"; });
+  var ended = C.clients.filter(function (c) { return c.status !== "paused" && subEnded(c); }).sort(function (a, b) { return a.sub.ago - b.sub.ago; });
+  var active = C.clients.filter(function (c) { return c.status !== "paused" && !subEnded(c); });
   // most flags first; then whoever has been quiet longest
   var needs = active.filter(function (c) { return c.sum.flags.length; }).sort(function (a, b) {
     return (b.sum.flags.length - a.sum.flags.length) || ((a.sum.lastActive || "") < (b.sum.lastActive || "") ? -1 : (a.sum.lastActive || "") > (b.sum.lastActive || "") ? 1 : 0);
   });
   var fine = active.filter(function (c) { return !c.sum.flags.length; }).sort(function (a, b) { return a.name.localeCompare(b.name); });
-  var lead = !C.clients.length ? "No clients yet." : needs.length === 0 ? "Everyone is on track." : needs.length === 1 ? "1 client needs you today." : needs.length + " clients need you today.";
+  var lead = !C.clients.length ? "No clients yet." : needs.length === 0 ? (ended.length ? "" : "Everyone is on track.") : needs.length === 1 ? "1 client needs you today." : needs.length + " clients need you today.";
+  if (ended.length) lead = (lead ? lead + " " : "") + (ended.length === 1 ? "1 subscription has ended." : ended.length + " subscriptions have ended.");
+  var took = (C.month || []).reduce(function (t, p) { return t + Number(p.amount || 0); }, 0);
   root.appendChild(h("div", { class: "c-head" }, [
-    h("div", {}, [h("h1", { class: "c-h1", text: "Clients" }), h("p", { class: "c-lead", text: lead })]),
+    h("div", {}, [h("h1", { class: "c-h1", text: "Clients" }), h("p", { class: "c-lead", text: lead }),
+      C.month && C.month.length ? h("p", { class: "c-quiet c-small", text: "Recorded this month: " + money(took) }) : null]),
     invite
   ]));
   if (!C.clients.length) {
@@ -434,7 +451,7 @@ function renderRoster(root) {
     return;
   }
   var first = true;
-  [["Needs you", needs], ["On track", fine], ["Paused", paused, "You can still see their log. They don't get flags while paused."]].forEach(function (g) {
+  [["Needs you", needs], ["On track", fine], ["Subscription ended", ended, "You see what they logged up to their last paid day. Record a payment to see the rest and send them anything."], ["Paused", paused, "You can still see their log. They don't get flags while paused."]].forEach(function (g) {
     var sec = rosterGroup(g[0], g[1], g[2], first);
     if (sec) { root.appendChild(sec); first = false; }
   });
@@ -450,6 +467,8 @@ function renderClient(root) {
   var status = c.status === "paused" ? h("span", { class: "pill gold", text: "Paused" }) : null;
   var pause = h("button", { class: "btn ghost sm", type: "button", text: c.status === "paused" ? "Resume" : "Pause" });
   pause.onclick = function () { setStatus(c, c.status === "paused" ? "active" : "paused"); };
+  var pay = h("button", { class: "btn ghost sm", type: "button", text: "Record a payment" });
+  pay.onclick = function () { openPayment(c, function () { afterPayment(c.id); }); };
   var remove = h("button", { class: "btn ghost sm c-danger", type: "button", text: "Remove client" });
   remove.onclick = function () {
     if (!confirm("Remove " + c.name + " from your clients? You'll stop seeing their log. They can join you again with a new invite.")) return;
@@ -459,10 +478,19 @@ function renderClient(root) {
   root.appendChild(h("div", { class: "c-head" }, [
     h("div", {}, [
       h("h1", { class: "c-h1" }, [h("span", { text: c.name, translate: "no" }), status]),
-      h("p", { class: "c-lead c-facts" }, [c.startedAt ? h("span", { text: "Client since " + longDate(c.startedAt) }) : null, h("span", { text: activeText(c.sum.lastActive) })])
+      h("p", { class: "c-lead c-facts" }, [c.startedAt ? h("span", { text: "Client since " + longDate(c.startedAt) }) : null, h("span", { text: activeText(c.sum.lastActive) }),
+        c.sub.kind === "running" || c.sub.kind === "ending" ? h("span", { text: "Paid until " + longDate(c.sub.until) }) : null])
     ]),
-    h("div", { class: "c-actions" }, [pause, remove])
+    h("div", { class: "c-actions" }, [pay, pause, remove])
   ]));
+  if (subEnded(c)) {
+    var renew = h("button", { class: "btn sm", type: "button", text: "Record a payment" });
+    renew.onclick = pay.onclick;
+    root.appendChild(h("section", { class: "card c-alert c-ended" }, [
+      h("div", {}, [h("b", { text: endedText(c.sub) }), h("p", { text: "You see what they logged until " + longDate(c.sub.until) + ". Record a payment to see the rest and send them programs, meal plans and comments." })]),
+      renew
+    ]));
+  }
   var tabs = h("nav", { class: "c-tabs", "aria-label": "Client" });
   CLIENT_TABS.forEach(function (t) {
     var a = h("a", { href: "#client=" + c.id + "&tab=" + t[0], "aria-current": C.tab === t[0] ? "page" : "false" }, [t[1]]);
@@ -474,7 +502,7 @@ function renderClient(root) {
   root.appendChild(body);
   if (!cl) { body.appendChild(h("p", { class: "c-quiet", text: "Loading…" })); return; }
   if (cl.failed) { body.appendChild(h("p", { class: "form-err", text: C.error })); return; }
-  ({ summary: tabSummary, comments: tabComments, workouts: tabWorkouts, meals: tabMeals, body: tabBody, program: tabProgram, mealplan: tabMealPlan, notes: tabNotes })[C.tab](body, c, cl);
+  ({ summary: tabSummary, comments: tabComments, workouts: tabWorkouts, meals: tabMeals, body: tabBody, program: tabProgram, mealplan: tabMealPlan, payments: tabPayments, notes: tabNotes })[C.tab](body, c, cl);
 }
 function setStatus(c, status) {
   coachApi.setStatus(C.me.id, c.id, status).then(function () {
@@ -604,6 +632,133 @@ function tabBody(body) {
   });
   body.appendChild(panel);
 }
+/* ---------- subscriptions (phase 6) ---------- */
+// none: payments aren't tracked for this client; running / ending (3 days or fewer left); ended (days ago).
+function subState(paidUntil, now) {
+  if (!paidUntil) return { kind: "none" };
+  var left = daysBetween(now, String(paidUntil).slice(0, 10));
+  return left < 0 ? { kind: "ended", ago: -left, until: paidUntil } : { kind: left <= 3 ? "ending" : "running", left: left, until: paidUntil };
+}
+function endsText(s) { return s.left === 0 ? "Subscription ends today" : s.left === 1 ? "Subscription ends tomorrow" : "Subscription ends in " + s.left + " days"; }
+function endedText(s) { return s.ago <= 1 ? "Subscription ended yesterday" : "Subscription ended " + s.ago + " days ago"; }
+// An ending subscription is something to act on; an ended one replaces the other flags, which would be
+// judged on a log the coach no longer sees in full.
+function subFlag(c) {
+  c.sum.flags = c.sum.flags.filter(function (f) { return f.k !== "sub"; });
+  if (c.sub.kind === "ending") c.sum.flags.unshift({ k: "sub", text: endsText(c.sub) });
+}
+function subEnded(c) { return !!c && c.sub && c.sub.kind === "ended"; }
+var PAY_METHODS = [["instapay", "InstaPay"], ["vodafone_cash", "Vodafone Cash"], ["cash", "Cash"], ["bank", "Bank transfer"], ["other", "Other"]];
+function money(v) { return Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }) + " EGP"; }
+function methodName(m) { var x = PAY_METHODS.filter(function (p) { return p[0] === m; })[0]; return x ? x[1] : m; }
+// The first day a new payment would cover: the day after the last paid day, or today if it has passed.
+function payFrom(c) { var t = today(); return c.paidUntil && c.paidUntil >= t ? ymdAdd(String(c.paidUntil).slice(0, 10), 1) : t; }
+
+function openPayment(c, done) {
+  var box = $("mbox"); box.textContent = "";
+  var close = h("button", { class: "btn ghost sm", type: "button", text: "✕", "aria-label": "Close" });
+  close.onclick = closeModal;
+  box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: "Record a payment" }), close]));
+  var prices = coachPrefs.prices || {}, days = 30, sheet = h("div", { class: "acct-sheet pay-sheet" });
+  box.appendChild(sheet);
+  var lengths = h("div", { class: "mchips", role: "group", "aria-label": "How long it covers" });
+  var other = h("input", { type: "text", inputmode: "numeric", placeholder: "Days", "aria-label": "Number of days" });
+  var otherWrap = h("label", {}, ["Days", other]);
+  var amount = h("input", { type: "text", inputmode: "decimal", placeholder: "e.g. 1500", "aria-label": "Amount in EGP" });
+  var method = h("select", { "aria-label": "How they paid" }, PAY_METHODS.map(function (m) { return h("option", { value: m[0], text: m[1] }); }));
+  method.value = coachPrefs.payMethod || "instapay";
+  var note = h("input", { type: "text", maxlength: "200", placeholder: "Optional", "aria-label": "Note" });
+  var until = h("p", { class: "acct-note" });
+  function paintUntil() {
+    var n = days || Math.round(num(other.value) || 0);
+    until.textContent = n >= 1 && n <= 366 ? "Paid until " + longDate(ymdAdd(payFrom(c), n - 1)) : "";
+  }
+  [[30, "1 month"], [90, "3 months"], [180, "6 months"], [0, "Other"]].forEach(function (x) {
+    var b = h("button", { class: "btn ghost", type: "button", "aria-pressed": String(x[0] === days), text: x[1] });
+    b.onclick = function () {
+      days = x[0];
+      lengths.querySelectorAll("button").forEach(function (y) { y.setAttribute("aria-pressed", String(y === b)); });
+      otherWrap.hidden = days !== 0;
+      if (days && prices[days] != null && !amount.value) amount.value = String(prices[days]);
+      paintUntil();
+      if (!days) other.focus();
+    };
+    lengths.appendChild(b);
+  });
+  otherWrap.hidden = true;
+  other.oninput = paintUntil;
+  if (prices[30] != null) amount.value = String(prices[30]);
+  var err = h("p", { class: "form-err", role: "alert" }); err.hidden = true;
+  var save = h("button", { class: "btn", type: "button", text: "Record payment" });
+  save.onclick = function () {
+    var n = days || Math.round(num(other.value) || 0), a = num(amount.value);
+    err.hidden = true;
+    if (!(n >= 1 && n <= 366)) { err.textContent = "Enter 1 to 366 days"; err.hidden = false; other.focus(); return; }
+    if (a === null || a < 0) { err.textContent = "Enter the amount they paid"; err.hidden = false; amount.focus(); return; }
+    save.disabled = true; save.classList.add("busy");
+    coachApi.recordPayment(c.id, a, n, method.value, note.value.trim()).then(function (paid) {
+      prices[n] = a; coachPrefs.prices = prices; coachPrefs.payMethod = method.value; savePrefs();
+      closeModal();
+      toast("Paid until " + longDate(paid), 3000);
+      if (done) done();
+    }).catch(function (e) { save.disabled = false; save.classList.remove("busy"); err.textContent = netMsg(e); err.hidden = false; });
+  };
+  sheet.appendChild(h("p", { class: "acct-note", text: c.sub.kind === "none" ? "For a payment made outside the app: InstaPay, Vodafone Cash or cash. The first one starts tracking their subscription." : c.sub.kind === "ended" ? "Their subscription has ended, so this one starts today." : "This one starts the day after their last paid day, " + longDate(c.paidUntil) + "." }));
+  sheet.appendChild(h("div", { class: "acct-form" }, [
+    h("div", {}, [h("span", { class: "ph-label", text: "How long it covers" }), lengths]),
+    otherWrap,
+    h("div", { class: "grid2" }, [h("label", {}, ["Amount (EGP)", amount]), h("label", {}, ["How they paid", method])]),
+    h("label", {}, ["Note", note]),
+    until, err, save
+  ]));
+  $("modal").setAttribute("aria-label", "Record a payment");
+  $("modal").hidden = false;
+  paintUntil();
+  amount.focus({ preventScroll: true });
+}
+// After a payment is recorded or taken back: everything the coach may see changes, so load it again.
+async function afterPayment(id) {
+  await loadRoster();
+  if (C.view === "client" && C.id === id) {
+    var cl = await loadClient(id);
+    if (C.id !== id) return;
+    C.client = cl; state = cl.state; commentsSource = coachComments(C.byId[id], cl); photoSource = coachPhotos(id, cl);
+  }
+  render();
+}
+function tabPayments(body, c, cl) {
+  var add = h("button", { class: "btn", type: "button", text: "Record a payment" });
+  add.onclick = function () { openPayment(c, function () { afterPayment(c.id); }); };
+  var s = c.sub, state = s.kind === "none" ? h("p", { class: "c-quiet", text: "Not tracked yet. Record their first payment to start." })
+    : s.kind === "ended" ? h("p", { class: "c-bad", text: endedText(s) })
+    : h("p", { class: "c-quiet" }, [h("span", { text: "Paid until " + longDate(s.until) }), s.kind === "ending" ? h("b", { class: "c-soon", text: endsText(s) }) : null]);
+  body.appendChild(h("section", { class: "c-panel" }, [
+    h("div", { class: "c-panel-head" }, [h("div", {}, [h("h2", { class: "c-h2 c-flat", text: "Subscription" }), state]), add]),
+    h("p", { class: "c-quiet c-small", text: "Clients pay you outside the app. Record each payment here: their subscription runs on from the last paid day. When it ends, they keep using the app, but you see only what they logged until then, and can't send them programs, meal plans or comments until the next payment." })
+  ]));
+  var list = cl.payments || [];
+  if (!list.length) return;
+  body.appendChild(h("h2", { class: "c-h2", text: "Payments" }));
+  var panel = h("div", { class: "c-roster c-log" });
+  list.forEach(function (p, i) {
+    var back = i === 0 ? h("button", { class: "linkbtn", type: "button", text: "Take back" }) : null;
+    if (back) back.onclick = function () {
+      if (!confirm("Take back this payment of " + money(p.amount) + "? Use this for a payment recorded by mistake.")) return;
+      coachApi.withdrawPayment(p.id).then(function () { toast("Payment taken back"); return afterPayment(c.id); }).catch(function (e) { toast(netMsg(e), 3200); });
+    };
+    panel.appendChild(h("article", { class: "c-entry" }, [
+      h("div", { class: "c-when" }, [h("b", { text: money(p.amount) }), h("small", { text: methodName(p.method) })]),
+      h("div", {}, [
+        h("p", { text: (p.days === 1 ? "1 day" : p.days + " days") + ": " + longDate(p.starts_on) + " to " + longDate(p.ends_on) }),
+        p.note ? h("p", { class: "c-said" }, [h("span", { translate: "no", text: p.note })]) : null,
+        h("p", { class: "c-small c-quiet", text: "Recorded " + longDate(p.created_at) }),
+        back
+      ])
+    ]));
+  });
+  body.appendChild(panel);
+}
+
 /* ---------- progress photos (phase 5) ---------- */
 // The client's photos through short-lived links, asked for all at once and renewed before they expire.
 function coachPhotos(clientId, cl) {
@@ -645,6 +800,7 @@ function coachComments(c, cl) {
     them: function () { return c.name; },
     raw: true,
     all: function () { return cl.comments; },
+    canWrite: function () { return !subEnded(C.byId[c.id]); },
     send: function (type, ref, body) {
       var row = { id: rid(), client_id: c.id, author_id: C.me.id, target_type: CM_TYPES[type] ? type : "general", target_ref: ref == null ? null : String(ref), body: String(body).slice(0, 2000) };
       var mine = { id: row.id, author: C.me.id, type: row.target_type, ref: row.target_ref, body: row.body, at: new Date().toISOString(), read: null, pending: true };
@@ -676,7 +832,8 @@ function coachComments(c, cl) {
 function tabComments(body, c) {
   var th = commentThread({
     placeholder: "Write to " + c.name + "…", label: "Comment for " + c.name,
-    empty: "No comments yet. Write to " + c.name + " about anything: a workout, their meals or a check-in. Comments on a workout, a day of meals or a check-in show up here too."
+    empty: "No comments yet. Write to " + c.name + " about anything: a workout, their meals or a check-in. Comments on a workout, a day of meals or a check-in show up here too.",
+    locked: "Their subscription has ended. Record a payment to write to them again."
   });
   body.appendChild(h("section", { class: "c-panel c-talk" }, [th]));
   // a long thread: start at the newest, where the box to write in is
@@ -937,8 +1094,14 @@ function daysView(days) {
     ]);
   }));
 }
+// While a subscription has ended, what was sent stays on show but nothing new can be sent.
+function lockedNote(body, what) { body.appendChild(h("p", { class: "c-quiet c-locked", text: "Their subscription has ended. Record a payment to send them " + what + "." })); }
 function tabProgram(body, c, cl) {
   if (C.edit && C.edit.kind === "program" && C.edit.clientId === c.id) { programEditor(body, c.name); return; }
+  if (subEnded(c)) {
+    if (cl.programRow) body.appendChild(h("section", { class: "c-panel" }, [h("h2", { class: "c-h2 c-flat", text: cl.programRow.name, translate: "no" }), daysView(cl.programRow.days)]));
+    lockedNote(body, "a program"); return;
+  }
   ensureTemplates();
   var cur = cl.programRow;
   if (cur) {
@@ -1069,6 +1232,10 @@ function mealsView(meals) {
 }
 function tabMealPlan(body, c, cl) {
   if (C.edit && C.edit.kind === "plan" && C.edit.clientId === c.id) { planEditor(body, c.name); return; }
+  if (subEnded(c)) {
+    if (cl.planRow) body.appendChild(h("section", { class: "c-panel" }, [h("h2", { class: "c-h2 c-flat", text: cl.planRow.name, translate: "no" }), targetsLine(cl.planRow.targets || {}), mealsView(cl.planRow.meals)]));
+    lockedNote(body, "a meal plan"); return;
+  }
   ensureTemplates();
   var cur = cl.planRow;
   if (cur) {

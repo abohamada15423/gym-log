@@ -71,7 +71,8 @@ function fakeServer() {
       return { data: json(rows.slice(from, from + n)), error: null, status: 200 };
     },
     profile: async id => s.offline ? down() : { data: s.profiles.get(id) || null, error: null, status: 200 },
-    coachLink: async uid => s.offline ? down() : { data: s.links.filter(l => l.client_id === uid && l.status !== 'archived'), error: null, status: 200 },
+    coachLink: async uid => s.offline ? down() : { data: s.links.filter(l => l.client_id === uid && l.status !== 'archived').map(l => ({ paid_until: null, ...l })), error: null, status: 200 },
+    myPayments: async uid => s.offline ? down() : { data: (s.payments || []).filter(p => p.client_id === uid), error: null, status: 200 },
     leaveCoach: async (uid, coach) => { s.links.forEach(l => { if (l.client_id === uid && l.coach_id === coach) l.status = 'archived'; }); return { error: null, status: 204 }; },
     rpc: async (name, args) => {
       if (name === 'accept_invite') {
@@ -809,4 +810,37 @@ test('progress photos are in Arabic when the app is', async t => {
   const photos = [a.doc.querySelector('.ph-compare'), a.doc.querySelector('.ph-field'), ...a.doc.querySelectorAll('.item-ph')];
   photos.forEach(el => { assert.ok(el); assert.deepEqual(english(el), []); assert.deepEqual(labels(el), []); });
   assert.match(a.doc.querySelector('.ph-caps').textContent, /قبل.*نوفمبر.*بعد/);
+});
+
+// ---- phase 6: the subscription with the coach -------------------------------------------------
+test('the subscription with the coach: paid until in the account sheet, and a banner when it ends soon or has ended', async t => {
+  const { server, a } = await coached(t);
+  const ymd = n => { const d = new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  server.links[0].paid_until = ymd(10);
+  server.payments = [{ id: 'p1', client_id: ME.id, amount: 1500, method: 'instapay', days: 30, starts_on: ymd(-19), ends_on: ymd(10) }];
+  await a.w.syncNow({ pull: true }); await a.settle();
+  a.doc.getElementById('t-train').click();
+  assert.equal(a.doc.querySelector('.sub-banner'), null, 'nothing to say ten days ahead');
+  a.doc.getElementById('acct').click(); await a.tick(); await a.tick();
+  assert.match(a.doc.querySelector('.acct-sub').textContent, /^Paid until /);
+  assert.match(a.doc.querySelector('.pay-list').textContent, /Payments.*1,500 EGP.*30 days · .* to /);
+  a.w.closeModal();
+  // three days or less: a word on the Train tab
+  server.links[0].paid_until = ymd(2);
+  await a.w.syncNow({ pull: true }); await a.settle();
+  a.doc.getElementById('t-train').click();
+  assert.match(a.doc.querySelector('.sub-banner').textContent, /Your coaching ends in 2 days.*Renew with your coach/);
+  // ended: logging goes on, and the app says what that means
+  server.links[0].paid_until = ymd(-1);
+  await a.w.syncNow({ pull: true }); await a.settle();
+  a.doc.getElementById('t-train').click();
+  const banner = a.doc.querySelector('.sub-banner');
+  assert.ok(banner.classList.contains('ended'));
+  assert.match(banner.textContent, /Your coaching has ended.*can't see what you log until you renew/);
+  a.doc.getElementById('coach-name').click();
+  assert.match(a.doc.getElementById('mbox').textContent, /Your coach will see new comments once you renew/);
+  // in Arabic
+  a.w.closeModal();
+  a.w.state.lang = 'ar'; a.w.applyLang(); a.w.render(); await a.tick();
+  assert.match(a.doc.querySelector('.sub-banner').textContent, /اشتراكك مع الكابتن خلص/);
 });

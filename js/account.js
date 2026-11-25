@@ -121,6 +121,38 @@ function serverMsg(e) {
   return String(e && e.message || "Something went wrong. Try again.");
 }
 
+/* ---------- the subscription with the coach (phase 6) ---------- */
+// What's paid: days left (0 = the last paid day is today), or how long ago it ended. null: not tracked.
+function mySub() {
+  var c = sync.uid ? sync.coach : null;
+  if (!c || !c.paidUntil) return null;
+  var until = String(c.paidUntil).slice(0, 10), left = daysBetween(today(), until);
+  return left < 0 ? { ended: true, ago: -left, until: until } : { ended: false, left: left, until: until };
+}
+// On the Train tab, from three days before it ends.
+function subBanner() {
+  var s = mySub();
+  if (!s || (!s.ended && s.left > 3)) return null;
+  return h("div", { class: "sub-banner" + (s.ended ? " ended" : ""), role: "status" }, [
+    h("b", { text: s.ended ? "Your coaching has ended" : s.left === 0 ? "Your coaching ends today" : s.left === 1 ? "Your coaching ends tomorrow" : "Your coaching ends in " + s.left + " days" }),
+    h("span", { text: s.ended ? "Your coach can't see what you log until you renew." : "Renew with your coach to keep your program and comments coming." })
+  ]);
+}
+function egp(v) { return Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }) + " EGP"; }
+// The account sheet's list of payments, when there's a connection.
+function paymentsList() {
+  var box = h("div", { class: "pay-list" });
+  Promise.resolve().then(function () { return syncApi.myPayments(sync.uid); }).then(function (r) {
+    var rows = (r && !r.error && r.data) || [];
+    if (!rows.length) return;
+    box.appendChild(h("h3", { class: "acct-h", text: "Payments" }));
+    rows.forEach(function (p) {
+      box.appendChild(h("div", { class: "pay-row" }, [h("b", { text: egp(p.amount) }), h("span", { text: (p.days === 1 ? "1 day" : p.days + " days") + " · " + mbDay(p.starts_on) + " to " + mbDay(p.ends_on) })]));
+    });
+  }, function () { });
+  return box;
+}
+
 /* ---------- comments with the coach (phase 4) ---------- */
 var cmOpen = null;  // the thread on screen, if any
 function openComments() {
@@ -131,6 +163,7 @@ function openComments() {
   close.onclick = closeModal;
   box.appendChild(h("div", { class: "mhead" }, [h("div", { class: "mtitle", text: appComments.them() }), close]));
   if (!sync.coach) box.appendChild(h("p", { class: "acct-note", text: "You don't have a coach right now. Your earlier comments stay here." }));
+  else if (mySub() && mySub().ended) box.appendChild(h("p", { class: "acct-note", text: "Your coaching has ended. Your coach will see new comments once you renew." }));
   cmOpen = commentThread({
     placeholder: "Write to your coach…", label: "Comment for your coach",
     empty: "No comments yet. Ask your coach about a workout, your meals or anything else."
@@ -439,6 +472,9 @@ var ACCT_VIEWS = {
     if (sync.coach) {
       body.appendChild(h("div", { class: "acct-coach" }, [h("span", { class: "acct-av sm", "aria-hidden": "true", text: initials(sync.coach.name) || "C" }), sync.coach.name ? "Coach " + sync.coach.name : "Your coach"]));
       body.appendChild(h("p", { class: "acct-note", text: "Your coach sees your workouts, meals, check-ins and habits." }));
+      var sub = mySub();
+      if (sub) body.appendChild(h("p", { class: "acct-sub" + (sub.ended ? " ended" : ""), text: sub.ended ? "Your coaching ended on " + mbDay(sub.until) + ". Your coach sees what you logged until then." : "Paid until " + mbDay(sub.until) }));
+      body.appendChild(paymentsList());
       var unread = syncUnread(), talk = h("button", { class: "btn", type: "button", text: unread ? "Comments · " + unread + " new" : "Comments" });
       talk.onclick = function () { openComments(); };
       body.appendChild(talk);

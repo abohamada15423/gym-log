@@ -123,6 +123,8 @@ function renderTrain(root) {
     h("span", { text: sync.coach && sync.coach.name ? "Program from Coach " + sync.coach.name : "Program from your coach" }),
     h("b", { text: cp.name, translate: "no" })
   ]));
+  var renewal = typeof subBanner === "function" ? subBanner() : null;
+  if (renewal) root.appendChild(renewal);
 
   // Program name + customize / change system
   var editDayBtn = h("button", { class: "btn ghost", type: "button", text: "✎ Edit exercises" });

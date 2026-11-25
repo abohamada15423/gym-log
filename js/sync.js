@@ -265,7 +265,8 @@ var syncApi = {
     return q.order("updated_at", { ascending: true }).order(order, { ascending: true }).range(from, from + n - 1);
   },
   profile: function (id) { return sb.from("profiles").select("id,full_name,role").eq("id", id).maybeSingle(); },
-  coachLink: function (uid) { return sb.from("coach_clients").select("coach_id,status").eq("client_id", uid).neq("status", "archived").limit(1); },
+  coachLink: function (uid) { return sb.from("coach_clients").select("coach_id,status,paid_until").eq("client_id", uid).neq("status", "archived").limit(1); },
+  myPayments: function (uid) { return sb.from("payments").select("id,amount,method,days,starts_on,ends_on").eq("client_id", uid).is("deleted_at", null).order("ends_on", { ascending: false }).limit(24); },
   leaveCoach: function (uid, coachId) { return sb.from("coach_clients").update({ status: "archived" }).eq("client_id", uid).eq("coach_id", coachId); },
   rpc: function (name, args) { return sb.rpc(name, args || {}); },
   uploadPhoto: function (path, blob) { return sb.storage.from("progress").upload(path, blob, { contentType: blob.type || "image/webp", upsert: true, cacheControl: "31536000" }); },
@@ -733,7 +734,7 @@ async function pullPeople() {
     if (row) {
       var p = await syncApi.profile(row.coach_id);
       if (p.error) syncCheck(p);
-      coach = { id: row.coach_id, status: row.status, name: (p.data && p.data.full_name) || null };
+      coach = { id: row.coach_id, status: row.status, name: (p.data && p.data.full_name) || null, paidUntil: row.paid_until || null };
     }
     if (stableStr(coach) !== stableStr(sync.coach)) changed = true;
     sync.coach = coach;

@@ -282,7 +282,29 @@ var AR_WORDS = {
   "That photo couldn't be read. Try another one.": "تعذّرت قراءة هذه الصورة. جرّب صورة أخرى.",
   "Photo not available right now": "الصورة غير متاحة الآن", "Slide between before and after": "حرّك بين قبل وبعد",
   "Enter at least one measurement or add a photo": "أدخل قياسًا واحدًا على الأقل أو أضف صورة",
-  "This browser couldn't keep the photos. Turn off private browsing and try again.": "تعذّر على هذا المتصفح حفظ الصور. أوقف التصفح الخاص وحاول مرة أخرى."
+  "This browser couldn't keep the photos. Turn off private browsing and try again.": "تعذّر على هذا المتصفح حفظ الصور. أوقف التصفح الخاص وحاول مرة أخرى.",
+  // subscriptions (phase 6)
+  "Payments": "المدفوعات", "Subscription": "الاشتراك", "Record a payment": "سجّل دفعة", "Record payment": "سجّل الدفعة", "How long it covers": "المدة",
+  "1 month": "شهر", "3 months": "٣ شهور", "6 months": "٦ شهور", "Other": "أخرى", "Days": "الأيام", "Number of days": "عدد الأيام",
+  "Amount (EGP)": "المبلغ (جنيه)", "Amount in EGP": "المبلغ بالجنيه", "e.g. 1500": "مثلًا 1500", "How they paid": "طريقة الدفع",
+  "InstaPay": "إنستاباي", "Vodafone Cash": "فودافون كاش", "Cash": "كاش", "Bank transfer": "تحويل بنكي", "Note": "ملاحظة", "Optional": "اختياري",
+  "Enter 1 to 366 days": "أدخل من 1 لـ 366 يوم", "Enter the amount they paid": "أدخل المبلغ اللي اتدفع", "Payment taken back": "اتلغت الدفعة", "Take back": "إلغاء",
+  "Subscription ended": "الاشتراك خلص", "Subscription ends today": "الاشتراك بيخلص النهارده", "Subscription ends tomorrow": "الاشتراك بيخلص بكرة",
+  "Subscription ended yesterday": "الاشتراك خلص امبارح", "1 day": "يوم واحد",
+  "Not tracked yet. Record their first payment to start.": "لسه مش متتبَّع. سجّل أول دفعة ليه عشان يبدأ.",
+  "Clients pay you outside the app. Record each payment here: their subscription runs on from the last paid day. When it ends, they keep using the app, but you see only what they logged until then, and can't send them programs, meal plans or comments until the next payment.":
+    "المتدربين بيدفعولك برّه الأبلكيشن، وانت بتسجّل كل دفعة هنا، والاشتراك بيكمل من آخر يوم مدفوع. ولما يخلص، المتدرب بيكمل يستخدم الأبلكيشن عادي، بس انت بتشوف اللي سجّله لحد آخر يوم مدفوع بس، ومش هتقدر تبعتله برامج ولا نظام أكل ولا تعليقات لحد الدفعة الجاية.",
+  "For a payment made outside the app: InstaPay, Vodafone Cash or cash. The first one starts tracking their subscription.": "لدفعة اتدفعت برّه الأبلكيشن: إنستاباي أو فودافون كاش أو كاش. أول دفعة بتبدأ تتبّع اشتراكه.",
+  "Their subscription has ended, so this one starts today.": "اشتراكه خلص، فالدفعة دي بتبدأ من النهارده.",
+  "You see what they logged up to their last paid day. Record a payment to see the rest and send them anything.": "بتشوف اللي سجّلوه لحد آخر يوم مدفوع. سجّل دفعة عشان تشوف الباقي وتقدر تبعتلهم.",
+  "Their subscription has ended. Record a payment to send them a program.": "اشتراكه خلص. سجّل دفعة عشان تبعتله برنامج.",
+  "Their subscription has ended. Record a payment to send them a meal plan.": "اشتراكه خلص. سجّل دفعة عشان تبعتله نظام أكل.",
+  "Their subscription has ended. Record a payment to write to them again.": "اشتراكه خلص. سجّل دفعة عشان تقدر تكتبله تاني.",
+  "Your coaching has ended": "اشتراكك مع الكابتن خلص", "Your coaching ends today": "اشتراكك مع الكابتن بيخلص النهارده", "Your coaching ends tomorrow": "اشتراكك مع الكابتن بيخلص بكرة",
+  "Your coach can't see what you log until you renew.": "الكابتن مش هيشوف اللي بتسجّله لحد ما تجدد.",
+  "Renew with your coach to keep your program and comments coming.": "جدّد مع الكابتن عشان البرنامج والتعليقات يفضلوا شغالين.",
+  "Your coaching has ended. Your coach will see new comments once you renew.": "اشتراكك مع الكابتن خلص. الكابتن هيشوف التعليقات الجديدة لما تجدد.",
+  "1 subscription has ended.": "اشتراك واحد خلص."
 };
 
 var AR_DOW = { Sat: "السبت", Sun: "الأحد", Mon: "الاثنين", Tue: "الثلاثاء", Wed: "الأربعاء", Thu: "الخميس", Fri: "الجمعة" };
@@ -305,6 +327,23 @@ function unitAr(u) { return u === "kg" ? "كجم" : u === "cm" ? "سم" : u === 
 // [pattern, replacement]. Replacements get the match groups; trWord() keeps unknown names as they are.
 var AR_POSE = { front: "من الأمام", side: "من الجنب", back: "من الظهر", Front: "الأمام", Side: "الجنب", Back: "الظهر", Before: "قبل", After: "بعد" };
 var AR_RULES = [
+  // subscriptions: amounts in pounds, days, and sentences that carry a date
+  [/^([\d,]+(?:\.\d+)?) EGP$/, function (m) { return m[1] + " جنيه"; }],
+  [/^Recorded this month: ([\d,]+(?:\.\d+)?) EGP$/, function (m) { return "اتسجّل الشهر ده: " + m[1] + " جنيه"; }],
+  [/^Take back this payment of ([\d,]+(?:\.\d+)?) EGP\? Use this for a payment recorded by mistake\.$/, function (m) { return "إلغاء الدفعة دي (" + m[1] + " جنيه)؟ ده لدفعة اتسجّلت بالغلط."; }],
+  [/^(\d+) subscriptions have ended\.$/, function (m) { return "اشتراكات خلصت: " + m[1] + "."; }],
+  [/^(.+\.) (1 subscription has ended\.|\d+ subscriptions have ended\.)$/, function (m) { return T(m[1]) + " " + T(m[2]); }],
+  [/^Subscription ends in (\d+) days$/, function (m) { return "الاشتراك بيخلص بعد " + m[1] + " أيام"; }],
+  [/^Subscription ended (\d+) days ago$/, function (m) { return "الاشتراك خلص من " + m[1] + " أيام"; }],
+  [/^Your coaching ends in (\d+) days$/, function (m) { return "اشتراكك مع الكابتن بيخلص بعد " + m[1] + " أيام"; }],
+  [/^Paid until (.+)$/, function (m) { return "مدفوع لحد " + arDate(m[1]); }],
+  [/^Recorded (.+)$/, function (m) { return "اتسجّلت " + arDate(m[1]); }],
+  [/^(\d+) days?: (.+) to (.+)$/, function (m) { return (m[1] === "1" ? "يوم واحد" : m[1] + " أيام") + ": " + arDate(m[2]) + " لحد " + arDate(m[3]); }],
+  [/^((?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d{1,2} \w{3}) to ((?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d{1,2} \w{3})$/, function (m) { return arDate(m[1]) + " لحد " + arDate(m[2]); }],
+  [/^This one starts the day after their last paid day, (.+)\.$/, function (m) { return "الدفعة دي بتبدأ من اليوم اللي بعد آخر يوم مدفوع، " + arDate(m[1]) + "."; }],
+  [/^You see what they logged until (.+)\. Record a payment to see the rest and send them programs, meal plans and comments\.$/,
+    function (m) { return "بتشوف اللي سجّله لحد " + arDate(m[1]) + ". سجّل دفعة عشان تشوف الباقي وتبعتله برامج ونظام أكل وتعليقات."; }],
+  [/^Your coaching ended on (.+)\. Your coach sees what you logged until then\.$/, function (m) { return "اشتراكك مع الكابتن خلص يوم " + arDate(m[1]) + "، والكابتن بيشوف اللي سجّلته لحد اليوم ده."; }],
   // progress photos: a pose or before/after, then a day and weight
   [/^Add another check-in with a (front|side|back) photo to compare\.$/, function (m) { return "أضف قياسًا آخر بصورة " + AR_POSE[m[1]] + " للمقارنة."; }],
   [/^(Front|Side|Back) photo, (.+)$/, function (m) { return "صورة " + AR_POSE[m[1]] + "، " + T(m[2]); }],

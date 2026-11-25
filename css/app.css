@@ -2711,3 +2711,17 @@ button.coach-name:focus-visible { outline: 2px solid var(--accent); outline-offs
 .ph-caps span:last-child { text-align: end }
 .ph-caps b { color: var(--ink) }
 .ph-stage img { -webkit-user-drag: none }
+
+/* ---------- the subscription with the coach (phase 6) ---------- */
+/* ending: gold, like everything that needs doing soon; ended: the warning red */
+.sub-banner { display: flex; flex-direction: column; gap: 2px; margin: 10px 2px 0; padding: 10px 14px; border-radius: 14px; background: var(--gold-soft); border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent); font-size: .9rem }
+.sub-banner b { color: var(--gold) }
+.sub-banner span { color: var(--ink) }
+.sub-banner.ended { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 40%, transparent) }
+.sub-banner.ended b { color: var(--warn) }
+.acct-sub { margin: 0; font-weight: 700 }
+.acct-sub.ended { color: var(--warn); font-weight: 600 }
+.pay-list:empty { display: none }
+.pay-list { display: flex; flex-direction: column; gap: 6px }
+.pay-row { display: flex; justify-content: space-between; gap: 10px; font-size: .9rem }
+.pay-row span { color: var(--muted); text-align: end }
