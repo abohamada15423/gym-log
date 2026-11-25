@@ -79,6 +79,7 @@ function fakeApi(db, opts = {}) {
       calls.push(['markRead', client, plain(ids).sort()]);
       db.comments.forEach(c => { if (c.client_id === client && ids.includes(c.id) && c.author_id !== COACH.id && !c.read_at) c.read_at = new Date().toISOString(); });
     },
+    photoUrls: async paths => { calls.push(['photoUrls', paths.length]); return Object.fromEntries(paths.map(p => [p, 'https://storage.example/signed/' + p])); },
     savePush: async row => { calls.push(['savePush', row.user_id, row.endpoint, row.lang]); },
     dropPush: async (me, endpoint) => { calls.push(['dropPush', me, endpoint]); }
   };
@@ -261,7 +262,7 @@ test('signing in, and an account that is not a coach is told so', async t => {
 });
 
 test('the dashboard is fully in Arabic when chosen', async t => {
-  const p = page(t, fakeApi(withComments(fixture())), { lang: 'ar' });
+  const p = page(t, fakeApi(withPhotos(withComments(fixture()))), { lang: 'ar' });
   await p.settle();
   // names, emails, codes and the exercises and foods people typed stay as written
   // text still in English: Latin words and no Arabic at all (a translated line may carry a name)
@@ -506,4 +507,34 @@ test('notifications in this browser: one button that saves and forgets the subsc
   bell.click(); await p.settle();
   assert.deepEqual(api.calls.filter(c => c[0] === 'dropPush'), [['dropPush', COACH.id, 'https://web.push.apple.com/coach-1']]);
   assert.equal(bell.getAttribute('aria-pressed'), 'false');
+});
+
+// ---- phase 5: progress photos ---------------------------------------------------------------------
+// Sara's first and latest check-ins carry photos.
+function withPhotos(db) {
+  const sara = db.body_checkins.filter(b => b.client_id === SARA).sort((a, b) => a.date < b.date ? -1 : 1);
+  sara[0].photos = { front: sara[0].date + '-00000001-0000-4000-8000-000000000000.webp' };
+  sara[sara.length - 1].photos = { front: sara[sara.length - 1].date + '-00000002-0000-4000-8000-000000000000.webp' };
+  return db;
+}
+test("the client's progress photos on the Body tab: thumbnails, and before and after through short-lived links", async t => {
+  const db = fixture(), api = fakeApi(db);
+  const name = (d, n) => `${d}-0000000${n}-0000-4000-8000-000000000000.webp`;
+  const sara = db.body_checkins.filter(b => b.client_id === SARA).sort((a, b) => a.date < b.date ? -1 : 1);
+  sara[0].photos = { front: name(sara[0].date, 1), side: name(sara[0].date, 2) };
+  sara[2].photos = { front: name(sara[2].date, 3) };
+  const p = page(t, api);
+  await p.settle();
+  await p.go('#client=' + SARA + '&tab=body');
+  await p.settle();
+  const cmp = p.doc.querySelector('.c-photos .ph-compare');
+  assert.ok(cmp, 'a before/after view');
+  assert.match(cmp.querySelector('.ph-caps').textContent, /Before .*75\.4 kg.*After .*72\.9 kg/);
+  const imgs = [...cmp.querySelectorAll('.ph-stage img')].map(i => i.getAttribute('src'));
+  assert.deepEqual(imgs, [`https://storage.example/signed/${SARA}/${name(sara[0].date, 1)}`, `https://storage.example/signed/${SARA}/${name(sara[2].date, 3)}`]);
+  assert.deepEqual(api.calls.filter(c => c[0] === 'photoUrls'), [['photoUrls', 3]], 'all her photos in one request');
+  assert.equal(p.doc.querySelectorAll('.c-entry .ph-thumb').length, 3, 'and small pictures with each check-in');
+  // nobody else's photos, and none for a client without any
+  await p.go('#client=' + OMAR + '&tab=body');
+  assert.equal(p.doc.querySelector('.ph-compare'), null);
 });

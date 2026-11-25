@@ -34,12 +34,15 @@ var BODY_KEYS = ["kg", "waist", "chest", "arm", "thigh", "hips", "fat"];
 // comments: the thread with the coach, id -> comment (comments.js shape); cout: comments written or deleted
 // here and not uploaded yet, id -> {op: "add" | "del"}; readOut: comments seen here whose read receipt
 // hasn't reached the server. push: this browser's notification subscription for the account, if it's on.
+// Progress photos: files waiting to go up or be deleted (name -> "up" | "del"), the ones the account has,
+// and when each stopped being used by any check-in (deleted after a short wait, so Undo still works).
 function freshSync() {
   return {
     v: 1, uid: null, email: null, name: null, role: null, ask: false,
     cursor: {}, outbox: {}, shadow: {}, hold: {}, rejected: {},
     coach: null, programs: {}, plans: {}, seenProgram: null, seenProgramM: null, seenPlan: null, lastSync: null, invite: null,
-    comments: {}, cout: {}, readOut: [], push: null
+    comments: {}, cout: {}, readOut: [], push: null,
+    files: {}, uploaded: {}, unref: {}
   };
 }
 var sync = (function () {
@@ -49,7 +52,7 @@ var sync = (function () {
 function saveSync() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch (e) { } }
 function persistState() { try { localStorage.setItem("gymlog-v1", JSON.stringify(state)); } catch (e) { } }
 function syncLinked() { return !!sync.uid; }
-function syncPending() { return Object.keys(sync.outbox).length + Object.keys(sync.cout).length; }
+function syncPending() { return Object.keys(sync.outbox).length + Object.keys(sync.cout).length + Object.keys(sync.files).length; }
 
 // What is happening right now (not saved): phase is one of local, saved, syncing, ok, offline, signin, error.
 var syncRt = { phase: "local", busy: null, again: null, lastPull: 0, retry: null, wait: 0, note: null, signingOut: false, hasSession: false, error: null, urlType: null, renderLater: false };
@@ -113,6 +116,7 @@ var ROW = {
     var r = { id: b.id, date: b.date };
     BODY_KEYS.forEach(function (k) { r[k] = k === "kg" ? rng(b.kg, 20, 400, true) : k === "fat" ? rng(b.fat, 0, 70, true) : rng(b[k], 0, 300, true); });
     r.note = txt(b.note, 500);
+    r.photos = cleanPhotos(b.photos);
     return r;
   },
   habit_days: function (v, d) { return { date: d, data: v }; },
@@ -133,6 +137,8 @@ var FROM = {
   body_checkins: function (r) {
     var b = { id: r.id, date: r.date, note: r.note || "" };
     BODY_KEYS.forEach(function (k) { b[k] = r[k] == null ? null : Number(r[k]); });
+    var ph = cleanPhotos(r.photos);
+    if (ph) b.photos = ph;
     return b;
   },
   habit_days: function (r) { return plainObj(r.data); },
@@ -210,6 +216,7 @@ function syncScan() {
   if (!sync.uid || sync.ask) return 0;
   syncRt.dirty = false;
   reminderRefresh();
+  var photosMoved = photoReconcile();
   var ids = normalizeIds(state), now = isoNow(), seen = {}, n = 0;
   eachLocal(function (key, t, row) {
     seen[key] = 1;
@@ -224,7 +231,7 @@ function syncScan() {
   });
   Object.keys(sync.hold).forEach(function (k) { if (!seen[k]) delete sync.hold[k]; });
   if (ids) persistState();
-  if (n || ids) saveSync();
+  if (n || ids || photosMoved) saveSync();
   return n;
 }
 // Called by save(): show that it's on the phone, then upload shortly (one upload for a burst of edits).
@@ -261,6 +268,8 @@ var syncApi = {
   coachLink: function (uid) { return sb.from("coach_clients").select("coach_id,status").eq("client_id", uid).neq("status", "archived").limit(1); },
   leaveCoach: function (uid, coachId) { return sb.from("coach_clients").update({ status: "archived" }).eq("client_id", uid).eq("coach_id", coachId); },
   rpc: function (name, args) { return sb.rpc(name, args || {}); },
+  uploadPhoto: function (path, blob) { return sb.storage.from("progress").upload(path, blob, { contentType: blob.type || "image/webp", upsert: true, cacheControl: "31536000" }); },
+  signedPhoto: function (path) { return sbReady().then(function (c) { return c.storage.from("progress").createSignedUrl(path, 3600); }); },
   addComment: function (row) { return sb.from("comments").insert(row); },
   removeComment: function (id) { return sb.from("comments").update({ deleted_at: isoNow() }).eq("id", id); },
   savePush: function (row) { return sb.from("push_subscriptions").upsert(row, { onConflict: "user_id,endpoint" }); },
@@ -362,6 +371,8 @@ function mergeRow(t, r) {
   if (!pend && sync.shadow[key] === hs && hasLocal(t, idOf(key))) return false;  // nothing new
   putLocal(t, idOf(key), rec);
   sync.shadow[key] = hs;
+  // its photos are in the account already: nothing to upload, and they're fetched when shown
+  if (t === "body_checkins") photoNames(rec.photos).forEach(function (n) { sync.uploaded[n] = 1; });
   return true;
 }
 function validLocal(t, k, v) {
@@ -459,6 +470,95 @@ function coachTargets() {
   var p = coachPlan(), out = {};
   if (p && p.targets) ["kcal", "protein"].forEach(function (k) { if (p.targets[k] != null) out[k] = p.targets[k]; });
   return out;
+}
+
+/* ---------- progress photos (phase 5) ---------- */
+// A photo goes up with its check-in. One that no check-in uses any more (the check-in was removed, or the
+// photo replaced) is deleted from the account and this phone a minute later, so Undo can still bring it back.
+var PHOTO_GRACE = 60000;
+function photoReconcile() {
+  var refs = {}, now = Date.now(), moved = false;
+  (state.body || []).forEach(function (b) {
+    if (!b || !isUuid(b.id) || sync.hold["body_checkins:" + b.id]) return;  // kept on this phone only
+    photoNames(b.photos).forEach(function (n) { refs[n] = 1; });
+  });
+  Object.keys(refs).forEach(function (n) {
+    if (sync.unref[n]) { delete sync.unref[n]; moved = true; }
+    if (sync.files[n] === "del") { delete sync.files[n]; moved = true; }
+    if (!sync.uploaded[n] && sync.files[n] !== "up") { sync.files[n] = "up"; moved = true; }
+  });
+  Object.keys(sync.uploaded).forEach(function (n) {
+    if (refs[n]) return;
+    if (!sync.unref[n]) { sync.unref[n] = now; moved = true; }
+    else if (now - sync.unref[n] >= PHOTO_GRACE) { sync.files[n] = "del"; delete sync.uploaded[n]; delete sync.unref[n]; moved = true; }
+  });
+  // never uploaded and not used any more: just don't send it
+  Object.keys(sync.files).forEach(function (n) { if (sync.files[n] === "up" && !refs[n]) { delete sync.files[n]; moved = true; } });
+  return moved;
+}
+// Storage answers differently from the database: sort its failures the same way syncCheck() does.
+function storageCheck(res) {
+  var e = res && res.error; if (!e) return;
+  if (isNetLike(e) || isNetLike(e.originalError) || e.name === "StorageUnknownError") throw netError();
+  var st = Number(e.status) || 0;
+  if (st === 401 || /jwt/i.test(String(e.message || ""))) { var a = new Error("signed out"); a.auth = true; throw a; }
+  if (!st || st >= 500) { var s = new Error(e.message || "Storage problem"); s.server = true; throw s; }
+  // any other 4xx: the server refused this file itself (too big, not a photo)
+}
+async function pushFiles() {
+  var names = Object.keys(sync.files).filter(function (n) { return sync.files[n] === "up"; });
+  for (var i = 0; i < names.length; i++) {
+    var n = names[i], blob = null;
+    try { blob = await photoFiles.get(n); } catch (e) { }
+    if (sync.files[n] !== "up") continue;
+    if (blob) {
+      var res = await syncApi.uploadPhoto(sync.uid + "/" + n, blob);
+      if (res.error) { storageCheck(res); sync.rejected["photo:" + n] = { m: isoNow(), why: String(res.error.message || "refused").slice(0, 200) }; }
+      else sync.uploaded[n] = 1;
+    }
+    // a file that isn't on this phone (a backup from elsewhere, say) has nothing to send
+    if (sync.files[n] === "up") delete sync.files[n];
+    saveSync();
+  }
+}
+async function dropFiles() {
+  var names = Object.keys(sync.files).filter(function (n) { return sync.files[n] === "del"; });
+  if (!names.length) return;
+  var res = await syncApi.removePhotos(names.map(function (n) { return sync.uid + "/" + n; }));
+  if (res.error) storageCheck(res);
+  names.forEach(function (n) { if (sync.files[n] === "del") delete sync.files[n]; });
+  saveSync();
+  photoFiles.del(names).catch(function () { });
+}
+// How the app shows a photo: from this phone, or (taken on another phone) fetched once through a short-lived
+// link and kept here, so it shows offline next time.
+var photoUrls = {};
+function syncPhotoUrl(name) {
+  if (photoUrls[name]) return Promise.resolve(photoUrls[name]);
+  var keep = function (blob) { return (photoUrls[name] = URL.createObjectURL(blob)); };
+  return photoFiles.get(name).catch(function () { return null; }).then(function (blob) {
+    if (blob) return keep(blob);
+    if (!sync.uid || sync.ask) return null;
+    return syncApi.signedPhoto(sync.uid + "/" + name).then(function (r) {
+      if (!r || r.error || !r.data || !r.data.signedUrl) return null;
+      return fetch(r.data.signedUrl).then(function (res) { return res.ok ? res.blob() : null; });
+    }).then(function (b) {
+      if (!b) return null;
+      photoFiles.put(name, b).catch(function () { });
+      return keep(b);
+    });
+  }).catch(function () { return null; });
+}
+var appPhotos = { url: syncPhotoUrl };
+if (typeof photoSource !== "undefined") photoSource = appPhotos;
+// Files on this phone that no check-in uses and that aren't waiting to go up or be deleted: what's left
+// of removed check-ins. Run at start-up, when no Undo can still be waiting.
+function photoGc() {
+  var refs = {};
+  (state.body || []).forEach(function (b) { photoNames(b && b.photos).forEach(function (n) { refs[n] = 1; }); });
+  return photoFiles.keys().then(function (keys) {
+    return photoFiles.del(keys.filter(function (k) { return !refs[k] && !sync.files[k]; }));
+  }).catch(function () { });
 }
 
 /* ---------- comments with the coach (phase 4) ---------- */
@@ -724,7 +824,9 @@ function syncNow(opts) {
       if (!user || user.id !== sync.uid) { syncRt.hasSession = false; setPhase(navigator.onLine === false ? "offline" : "signin"); return false; }
       syncRt.hasSession = true;
       setPhase("syncing");
+      await pushFiles();  // photos first, so a check-in never points at a file that isn't there yet
       await syncPush();
+      await dropFiles();
       await pushComments();
       if (opts.pull || Date.now() - syncRt.lastPull > SYNC_PULL_EVERY) await syncPull();
       sync.lastSync = isoNow(); syncRt.wait = 0; syncRt.error = null; saveSync();
@@ -901,6 +1003,7 @@ async function syncSignOut(wipe) {
   if (wipe) {
     var keep = { lang: state.lang, notify: state.notify, keepAwake: state.keepAwake };
     state = Object.assign(fresh(), keep);
+    photoFiles.keys().then(photoFiles.del).catch(function () { });
   }
   applyLoaded(); persistState();  // the coach's program goes with the account
   syncRt.signingOut = false; syncRt.hasSession = false; syncRt.lastPull = 0; syncRt.pushChecked = false;
@@ -951,6 +1054,7 @@ function syncStart() {
     if (document.visibilityState !== "hidden" && Date.now() - (syncRt.lastPullTry || 0) > SYNC_PULL_EVERY) syncNow({ pull: true });
   }, 2000);
   if (sync.uid || syncRt.urlType || sync.invite) sbReady().catch(function () { });
+  photoGc();
   if (sync.uid && !sync.ask) { setPhase(navigator.onLine === false ? "offline" : "syncing"); syncNow({ pull: true }); }
   if (typeof acctStart === "function") acctStart();
 }

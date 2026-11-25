@@ -574,3 +574,27 @@ dbTest('the notification helpers are for the database alone, and reminders run e
   await db.query('delete from auth.users where id = $1', [coach2.id]);
   assert.deepEqual([await subsOf(coach2.id), await subsOf(coach.id)], [0, 1]);
 });
+
+// ---- phase 5: progress photos (0004_progress_photos.sql) -------------------------------------
+
+dbTest('a check-in holds up to three photos, named the way the app names them', async () => {
+  const id = uuid(), name = ext => `2026-11-24-${uuid()}.${ext}`;
+  const front = name('webp'), side = name('jpg');
+  await upsert(alice, 'body_checkins', { id, client_id: alice.id, date: '2026-11-24', kg: 72.9, photos: { front, side } });
+  assert.deepEqual((await rows(coach, 'select photos from public.body_checkins where id = $1', [id]))[0].photos, { front, side });
+  // anything else is refused: another pose, a path out of the folder, someone else's folder, another type, not a name
+  for (const bad of [{ top: front }, { front: '../' + front }, { front: `${bob.id}/${front}` }, { front: front.replace('.webp', '.png') }, { front: 7 }, ['x']]) {
+    await assert.rejects(upsert(alice, 'body_checkins', { id: uuid(), client_id: alice.id, date: '2026-11-24', photos: bad }), /body_checkins_photos/, JSON.stringify(bad));
+  }
+  // a check-in without photos, as before; and the old single-photo column is gone
+  await upsert(alice, 'body_checkins', { id: uuid(), client_id: alice.id, date: '2026-11-24', kg: 73 });
+  const cols = await db.query("select column_name from information_schema.columns where table_schema = 'public' and table_name = 'body_checkins' and column_name like 'photo%'");
+  assert.deepEqual(cols.rows.map(r => r.column_name), ['photos']);
+});
+
+dbTest('the progress bucket takes small photos only, and stays private', async () => {
+  const b = (await db.query("select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'progress'")).rows[0];
+  assert.deepEqual([b.public, Number(b.file_size_limit), b.allowed_mime_types], [false, 2097152, ['image/webp', 'image/jpeg']]);
+  // the photo check is for the table's own use; visitors can't reach it
+  await assert.rejects(as('anon', 'select private.valid_photos(null)'), /permission denied/);
+});

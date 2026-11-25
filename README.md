@@ -37,6 +37,15 @@ Run `python -m http.server 8000` from this directory and open http://localhost:8
 - Custom foods can include carbs and fat. Leave calories blank to calculate them from the macros, and tick "Save to My Foods" to reuse the food with one tap.
 - Once you have 3 or more workouts, the Train tab reminds you to back up if you haven't, or if it has been 14+ days and you've logged new workouts. On phones that support it, Back up opens the share sheet so you can save the file to Files or send it.
 
+## Progress photos
+
+With a check-in on the Progress tab, add photos from the front, side and back (from the camera or the gallery). A check-in can be photos only. Each photo is made smaller on the phone (1080 pixels) and saved again, which also drops what the camera stored in it, location included.
+
+- **Before and after:** for each pose, the later photo lies over the earlier one. Drag across it, or use the slider under it. Pick which check-ins to compare; it starts with the first and the latest.
+- The history shows each check-in's photos small. Tap one to see it large.
+- Photos are kept on the phone and work offline. With an account they also upload, with sync, to a private folder that only you and your coach can open. Your other phones fetch them once and keep them.
+- Removing a check-in deletes its photos a minute later, from the account and the phone, so Undo still works. Deleting the account deletes all of them.
+
 ## Accounts and sync
 
 Tap the round button at the top right, or **Sign in or create account** on the Plan tab. Accounts use email and password; a new account confirms its email once. Everything stays usable without an account.
@@ -69,6 +78,7 @@ Coaches open **coach.html** (`…/gym-log/coach.html`), or **Open the coach dash
 - **Invite a client:** makes a 12-character code and a link (`…/gym-log/?invite=CODE`) that works once for 7 days. Open codes can be withdrawn.
 - **Comments:** each client has a **Comments** tab with the whole thread and a count of new ones, and you can comment under any workout, day of meals or check-in. The roster shows new comments under a client's name, and **Waiting for your reply** under Needs you while the client has the last word. New comments show up within a minute while the page is open.
 - **Notifications:** the **Notifications** button at the top turns them on in this browser: you get one when a client writes to you, and it opens their comments.
+- **Progress photos:** the Body tab shows the client's photos with each check-in, and the same before-and-after view as the app, through links that expire after an hour.
 
 Coaches only ever read their clients' data; the database doesn't let them change it. The dashboard signs in separately from the app, so signing in there doesn't sign the app in on the same device.
 
@@ -89,7 +99,8 @@ There is no build step. `index.html` holds the page markup, `css/app.css` the st
 | `js/config.js` | The Supabase project's address, public key and the public key for notifications (VAPID) |
 | `js/comments.js` | Comments between client and coach, drawn the same way in the app and on the coach page |
 | `js/push.js` | Notifications in this browser: permission, the push subscription, what a tap opens |
-| `js/sync.js` | Accounts and sync: change detection, outbox, upload, download, coach programs, comments, notifications and reminders. Loads `js/vendor/supabase.js` only when an account is used |
+| `js/progress-photos.js` | Progress photos: the store on the phone, shrinking a photo, the check-in slots, thumbnails and the before-and-after view (app and coach page) |
+| `js/sync.js` | Accounts and sync: change detection, outbox, upload, download, coach programs, comments, notifications, reminders and progress photos. Loads `js/vendor/supabase.js` only when an account is used |
 | `js/i18n.js` | Arabic translations and the right-to-left switch |
 | `js/effects.js` | Undo, SVG charts, count-up numbers, confetti |
 | `js/logic.js` | Storage, programs, theme, exercise history, suggestions, warm-ups, habits |
@@ -110,9 +121,9 @@ When you add a file to `js/`, add a `<script>` tag for it in `index.html` and it
 
 Run `npm ci`, then `npm test`. The tests exercise the app DOM with jsdom, including date persistence, completion and undo, partial workout saves, input validation, copying previous sets, keyboard cancellation, undoing removals, backup import, editable goals, progress charts, weight suggestions, workout history, food macros and backup reminders. Canvas rendering and visual layout require a browser check.
 
-`tests/coach.test.cjs` runs the coach dashboard against a fake server: the roster groups and numbers, every flag's threshold, a client's tabs (and that nothing is written to the device), private notes, pause and remove, invites, sign-in, comments (new counts, the reply flag, read receipts, comments on a workout, a day of meals and a check-in), the notifications button, and the Arabic version.
+`tests/coach.test.cjs` runs the coach dashboard against a fake server: the roster groups and numbers, every flag's threshold, a client's tabs (and that nothing is written to the device), private notes, pause and remove, invites, sign-in, comments (new counts, the reply flag, read receipts, comments on a workout, a day of meals and a check-in), the notifications button, progress photos, and the Arabic version.
 
-`tests/sync.test.cjs` runs accounts and sync against a fake server that follows the database's last-write-wins rules: the first upload, a second phone with the same data, offline changes, conflicts in both directions, the pull overlap, settings and habits, refused records, keeping data on the phone, coach programs and meal plans, backups on a signed-in phone, joining a coach, signing out, deleting the account, comments (arriving, read receipts, replies about a workout, offline comments, where they show), notifications and reminders, and the Arabic screens.
+`tests/sync.test.cjs` runs accounts and sync against a fake server that follows the database's last-write-wins rules: the first upload, a second phone with the same data, offline changes, conflicts in both directions, the pull overlap, settings and habits, refused records, keeping data on the phone, coach programs and meal plans, backups on a signed-in phone, joining a coach, signing out, deleting the account, comments (arriving, read receipts, replies about a workout, offline comments, where they show), notifications and reminders, progress photos (taken with a check-in, uploaded, compared, deleted after Undo's minute, fetched on another phone, kept on the phone without an account), and the Arabic screens.
 
 `tests/push.test.cjs` checks the push function: its encryption against the worked example in RFC 8291 byte for byte, the VAPID signature, that it only answers the database and only posts to push services, and that it forgets browsers that are gone. It also runs `sw.js`: a notification shows in its own language, and a tap opens the right page.
 

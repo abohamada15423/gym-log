@@ -191,11 +191,19 @@ function renderBody(root) {
   }
   root.appendChild(tcard);
 
+  // progress photos: the later one slides over the earlier one (phase 5)
+  var compare = photoCompare(state.body);
+  if (compare) {
+    root.appendChild(h("h2", { text: "Progress photos" }));
+    root.appendChild(h("div", { class: "card ph-card" }, [compare]));
+  }
+
   root.appendChild(h("h2", { text: "Log a check-in" }));
   var f = { date: h("input", { type: "date", value: today() }) };
   BODY_METRICS.forEach(function (m) {
     f[m.k] = h("input", { type: "text", inputmode: "decimal", placeholder: m.k === "kg" ? "e.g. 88.5" : m.unit });
   });
+  var slots = photoSlots();
   var add = h("button", { class: "btn", text: "Save check-in" });
   add.onclick = function () {
     var entry = { id: rid(), date: f.date.value || today(), note: "" }, any = false, bad = null;
@@ -204,10 +212,16 @@ function renderBody(root) {
       if (v !== null && (v <= 0 || (m.k === "fat" && v >= 70))) bad = bad || m.label;
       entry[m.k] = v; if (v !== null) any = true;
     });
+    var picked = slots.picked(), poses = Object.keys(picked);
     if (bad) { toast("Check the " + bad.toLowerCase() + " value"); return; }
-    if (!any) { toast("Enter at least one measurement"); return; }
-    state.body.push(entry);
-    save(); toast("Check-in saved"); render();
+    if (!any && !poses.length) { toast("Enter at least one measurement or add a photo"); return; }
+    if (!poses.length) { state.body.push(entry); save(); toast("Check-in saved"); render(); return; }
+    // the photos are kept on the phone first; the check-in is saved once they are
+    add.disabled = true;
+    entry.photos = {};
+    Promise.all(poses.map(function (p) { var n = photoName(entry.date, picked[p]); entry.photos[p] = n; return photoFiles.put(n, picked[p]); })).then(function () {
+      state.body.push(entry); slots.clear(); save(); toast("Check-in saved"); render();
+    }, function () { add.disabled = false; toast("This browser couldn't keep the photos. Turn off private browsing and try again.", 4200); });
   };
   var lbl = function (m) { return h("label", {}, [m.label + " (" + m.unit + ")", f[m.k]]); };
   var more = BODY_METRICS.slice(2).map(lbl), moreGrid = [];
@@ -216,6 +230,10 @@ function renderBody(root) {
     h("label", {}, ["Date", f.date]),
     h("div", { class: "grid2" }, [lbl(BODY_METRICS[0]), lbl(BODY_METRICS[1])]),
     h("details", { class: "more-m" }, [h("summary", { text: "More measurements: chest, arms, thighs, hips, body fat" })].concat(moreGrid)),
+    h("div", { class: "ph-field" }, [
+      h("span", { class: "ph-label", text: "Photos (optional)" }), slots,
+      h("small", { class: "note", text: typeof sync !== "undefined" && sync.uid ? (sync.coach ? "Front, side and back. Your coach sees them too." : "Front, side and back. Saved in your account.") : "Front, side and back. Kept on this phone only." })
+    ]),
     add
   ]));
 
@@ -226,17 +244,20 @@ function renderBody(root) {
     var del = h("button", { class: "btn ghost sm", text: "Remove" });
     del.onclick = function () { removeWithUndo("body", b, "Check-in · " + b.date); };
     var right = h("div", { class: "row-r" }, [h("div", { class: "v", text: parts.join(" · ") }), del]);
-    list.appendChild(h("div", { class: "item" }, [
+    var item = h("div", { class: "item" }, [
       h("div", {}, [h("div", { text: b.note || "Check-in" }), h("div", { class: "d", text: b.date })]),
       right
-    ]));
+    ]);
+    list.appendChild(item);
+    var thumbs = photoThumbs(b, state.body);
+    if (thumbs) { item = h("div", { class: "item-ph" }, [thumbs]); list.appendChild(item); }
     // comments on this check-in: shown under it; without any, a small button starts one
     if (typeof cmHere === "function" && cmHere("checkin", b.id)) {
       var cms = commentBlock("checkin", b.id, { placeholder: "Tell your coach about this check-in…" }), holder = h("div", { class: "item-cm" }, [cms]);
       if (cmOn("checkin", b.id).length) list.appendChild(holder);
       else {
         var talk = h("button", { class: "btn ghost sm", type: "button", text: "Comment", "aria-label": "Comment on this check-in" });
-        talk.onclick = function () { talk.remove(); right.parentNode.after(holder); cms.write(); };
+        talk.onclick = function () { talk.remove(); item.after(holder); cms.write(); };
         right.insertBefore(talk, del);
       }
     }

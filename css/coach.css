@@ -231,3 +231,8 @@ a.crow:hover { background: var(--surface-2) }
   .c-bell span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
   .c-day > .cm-block { padding: 0 16px 14px }
 }
+
+/* ---------- progress photos (phase 5) ---------- */
+.c-photos { max-width: 440px }
+.c-photos .ph-stage { max-height: none }
+.c-entry .ph-thumbs { margin-top: 10px }
