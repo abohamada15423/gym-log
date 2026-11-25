@@ -271,7 +271,18 @@ var AR_WORDS = {
   "Get a notification when a client writes to you": "يصلك إشعار عندما يكتب لك متدرب",
   "You get a notification when a client writes to you. Tap to turn it off.": "يصلك إشعار عندما يكتب لك متدرب. اضغط لإيقافه.",
   "Notifications off in this browser": "أُوقفت الإشعارات في هذا المتصفح",
-  "Notifications on ✓ You'll hear when a client writes to you.": "الإشعارات تعمل ✓ سيصلك إشعار عندما يكتب لك متدرب."
+  "Notifications on ✓ You'll hear when a client writes to you.": "الإشعارات تعمل ✓ سيصلك إشعار عندما يكتب لك متدرب.",
+  // progress photos (phase 5)
+  "Front": "الأمام", "Side": "الجنب", "Before": "قبل", "After": "بعد", "Photos": "الصور", "Pose": "الوضع", "Progress photos": "صور التقدّم",
+  "Photos (optional)": "الصور (اختياري)", "Add a front photo": "أضف صورة من الأمام", "Add a side photo": "أضف صورة من الجنب", "Add a back photo": "أضف صورة من الظهر",
+  "Remove the front photo": "احذف الصورة الأمامية", "Remove the side photo": "احذف الصورة الجانبية", "Remove the back photo": "احذف صورة الظهر",
+  "Front, side and back. Your coach sees them too.": "من الأمام والجنب والظهر، والكابتن يراها أيضًا.",
+  "Front, side and back. Saved in your account.": "من الأمام والجنب والظهر، وتُحفظ في حسابك.",
+  "Front, side and back. Kept on this phone only.": "من الأمام والجنب والظهر، وتبقى على هذا الهاتف فقط.",
+  "That photo couldn't be read. Try another one.": "تعذّرت قراءة هذه الصورة. جرّب صورة أخرى.",
+  "Photo not available right now": "الصورة غير متاحة الآن", "Slide between before and after": "حرّك بين قبل وبعد",
+  "Enter at least one measurement or add a photo": "أدخل قياسًا واحدًا على الأقل أو أضف صورة",
+  "This browser couldn't keep the photos. Turn off private browsing and try again.": "تعذّر على هذا المتصفح حفظ الصور. أوقف التصفح الخاص وحاول مرة أخرى."
 };
 
 var AR_DOW = { Sat: "السبت", Sun: "الأحد", Mon: "الاثنين", Tue: "الثلاثاء", Wed: "الأربعاء", Thu: "الخميس", Fri: "الجمعة" };
@@ -292,7 +303,12 @@ function arIso(s) { return s.replace(/\b(\d{4})-(\d\d)-(\d\d)\b/g, function (_, 
 function unitAr(u) { return u === "kg" ? "كجم" : u === "cm" ? "سم" : u === "g" ? "جم" : u === "reps" ? "تكرار" : u === "kcal" ? "سعرة" : u; }
 
 // [pattern, replacement]. Replacements get the match groups; trWord() keeps unknown names as they are.
+var AR_POSE = { front: "من الأمام", side: "من الجنب", back: "من الظهر", Front: "الأمام", Side: "الجنب", Back: "الظهر", Before: "قبل", After: "بعد" };
 var AR_RULES = [
+  // progress photos: a pose or before/after, then a day and weight
+  [/^Add another check-in with a (front|side|back) photo to compare\.$/, function (m) { return "أضف قياسًا آخر بصورة " + AR_POSE[m[1]] + " للمقارنة."; }],
+  [/^(Front|Side|Back) photo, (.+)$/, function (m) { return "صورة " + AR_POSE[m[1]] + "، " + T(m[2]); }],
+  [/^(Front|Side|Back|Before|After), (.+)$/, function (m) { return AR_POSE[m[1]] + "، " + T(m[2]); }],
   // comments: counts, and sentences that carry a client's name
   [/^(\d+) new comments from your coach$/, function (m) { return "تعليقات جديدة من الكابتن: " + m[1]; }],
   [/^(\d+) new comments$/, function (m) { return "تعليقات جديدة: " + m[1]; }],
@@ -524,7 +540,7 @@ function T(s) {
   return out === core ? s : lead + out + trail;
 }
 
-var i18nObserver = null, I18N_ATTRS = ["placeholder", "aria-label", "title", "label"];
+var i18nObserver = null, I18N_ATTRS = ["placeholder", "aria-label", "title", "label", "alt"];
 function trNode(n) {
   if (n.nodeType === 3) {
     var p = n.parentNode;

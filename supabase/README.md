@@ -7,6 +7,7 @@
 | `migrations/0001_coach_core.sql` | الجداول والصلاحيات (RLS) والدوال وتخزين الصور. **ده اللي بيتنفّذ على المشروع.** |
 | `migrations/0002_delete_account.sql` | `delete_my_account()`: كل واحد يمسح حسابه وكل بياناته (المرحلة ١) |
 | `migrations/0003_comments_push.sql` | التعليقات (إيصال القراية، وصندوق الكابتن)، واشتراكات الإشعارات، والإشعار اللي بيتبعت لكل حدث، وتذكير أيام التمرين (المرحلة ٤) |
+| `migrations/0004_progress_photos.sql` | صور التقدّم: ٣ صور لكل قياس (`photos`)، وأسماء الملفات متشيّكة، والـ bucket بيقبل صور بس و٢ ميجا بالكتير (المرحلة ٥) |
 | `functions/push/` | الـ Edge Function اللي بتشفّر الإشعار وتبعته (Web Push بـ VAPID). `index.ts` للنشر، والشغل في `handler.mjs` و`webpush.mjs` |
 | `tests/rls.test.cjs` | اختبارات بتثبت كل قاعدة صلاحية على Postgres محلي |
 | `tests/supabase_stub.sql` | نسخة مصغّرة من Supabase للاختبارات بس. **ماتنفذوش على المشروع الحقيقي** |
@@ -65,6 +66,17 @@
     - العربي.
   - **اتجرّب كمان مباشرة:** تعليق من الكابتن، وبرنامج جديد، وصلوا للـ function ولـ Google.
   - **ملحوظة:** Supabase بقى مابيدّيش أدوار الـ API صلاحيات على الجداول الجديدة لوحده، فالـ migration بيدّي `service_role` (اللي الـ function بتستخدمه) القراءة والمسح على `push_subscriptions` بس.
+- **المرحلة ٥ (صور التقدّم):**
+  - **`0004_progress_photos.sql` اتطبق.**
+  - **الاختبار على المشروع الحقيقي** بكابتن وكلاينت وهميين اتمسحوا بعدها، و٢٠ من ٢٠ نجحوا:
+    - صور بحجم صور الكاميرا اتصغّرت على الموبايل لـ 1080 بكسل، واترفعت WebP في فولدر الكلاينت.
+    - المقارنة بتتسحب بالصباع.
+    - الكابتن شاف الصور بلينكات مؤقتة، ومقدرش يرفع حاجة في فولدر الكلاينت.
+    - موبايل تاني للكلاينت جاب الصور واحتفظ بيها.
+    - الـ bucket رفض ملف ٢٫٥ ميجا وملف مش صورة.
+    - مسح قياس مسح صورته بعد دقيقة «تراجع».
+    - العربي.
+    - مسح الحساب من الأبلكيشن مسح كل الصور من Storage.
 - **إعدادات الدخول:**
   - Site URL هو `https://abohamada15423.github.io/gym-log/`.
   - Redirect URLs هي الموقع و`localhost:8000` و`localhost:8765`.
@@ -149,6 +161,8 @@ What the tests prove (one test each):
 
 The suite was also checked against eleven deliberate breakages of the migration (anon access, missing `search_path`, coach editing client comments, writable `read_at`, editable `role`, older edits winning, re-activating archived links, reusable invites, invites reusable after account deletion, checking the code before the existing coach, coaches reading other folders). Each one made a test fail.
 
+Phase 5 (`0004_progress_photos.sql`): a check-in holds up to three photos, named the way the app names them (another pose, a path out of the folder, someone else's folder or another file type is refused); the bucket takes photos up to 2 MB only and stays private.
+
 Phase 4 (`0003_comments_push.sql`) adds seven more:
 
 - push subscriptions: your own only; only the big push services' addresses; one browser can hold two accounts; at most 20 per account; the push function's role can find and delete them and nothing else
@@ -178,4 +192,4 @@ Keep the VAPID keys as they are: browsers subscribe with the public key, so new 
 
 ## Changing the schema later
 
-Add a new file, `migrations/0004_<what>.sql`. Don't edit a migration that already ran on the project. Add tests for any new rule to `tests/rls.test.cjs` and run `npm run test:db` before applying the file in the SQL editor.
+Add a new file, `migrations/0005_<what>.sql`. Don't edit a migration that already ran on the project. Add tests for any new rule to `tests/rls.test.cjs` and run `npm run test:db` before applying the file in the SQL editor.

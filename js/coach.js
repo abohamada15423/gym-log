@@ -93,6 +93,15 @@ var coachApi = window.coachApi || {
   addComment: function (row) { return coachDb().from("comments").insert(row).then(must); },
   removeComment: function (id) { return coachDb().from("comments").update({ deleted_at: new Date().toISOString() }).eq("id", id).then(must); },
   markRead: function (clientId, ids) { return coachDb().rpc("mark_comments_read", { p_client: clientId, p_ids: ids }).then(must); },
+  // progress photos: short-lived links, path -> address (phase 5)
+  photoUrls: function (paths) {
+    return coachDb().storage.from("progress").createSignedUrls(paths, 3600).then(function (r) {
+      if (r.error) throw r.error;
+      var out = {};
+      (r.data || []).forEach(function (x) { if (x && x.path && x.signedUrl && !x.error) out[x.path] = x.signedUrl; });
+      return out;
+    });
+  },
   // notifications in this browser
   savePush: function (row) { return coachDb().from("push_subscriptions").upsert(row, { onConflict: "user_id,endpoint" }).then(must); },
   dropPush: function (me, endpoint) { return coachDb().from("push_subscriptions").delete().eq("user_id", me).eq("endpoint", endpoint).then(must); }
@@ -120,7 +129,12 @@ function toState(d) {
   }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
   s.food = (d.food || []).map(function (r) { var f = { id: r.id, date: r.date, name: r.name, kcal: Number(r.kcal) || 0, p: Number(r.p) || 0 }; if (r.c != null) f.c = Number(r.c); if (r.f != null) f.f = Number(r.f); return f; })
     .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
-  s.body = (d.body || []).map(function (r) { var b = { id: r.id, date: r.date, note: r.note || "" }; BODY_METRICS.forEach(function (m) { b[m.k] = r[m.k] == null ? null : Number(r[m.k]); }); return b; })
+  s.body = (d.body || []).map(function (r) {
+    var b = { id: r.id, date: r.date, note: r.note || "" }, ph = cleanPhotos(r.photos);
+    BODY_METRICS.forEach(function (m) { b[m.k] = r[m.k] == null ? null : Number(r[m.k]); });
+    if (ph) b.photos = ph;
+    return b;
+  })
     .sort(function (a, b) { return a.date < b.date ? -1 : 1; });
   (d.habits || []).forEach(function (r) { if (r.data && typeof r.data === "object") s.habits[r.date] = r.data; });
   var set = settingsOf(d.settings);
@@ -271,19 +285,19 @@ async function loadClient(id) {
 function route() {
   var q = new URLSearchParams(location.hash.slice(1)), id = q.get("client");
   if (C.phase !== "ready") { render(); return; }
-  if (location.hash === "#templates") { C.view = "templates"; C.id = null; C.client = null; commentsSource = null; state = baseState; render(); return; }
+  if (location.hash === "#templates") { C.view = "templates"; C.id = null; C.client = null; commentsSource = null; photoSource = null; state = baseState; render(); return; }
   if (!id || !C.byId[id]) { openList(); return; }
   var tab = q.get("tab");
   C.tab = CLIENT_TABS.some(function (t) { return t[0] === tab; }) ? tab : "summary";
   if (C.view === "client" && C.id === id && C.client) { state = C.client.state; render(); return; }
-  C.view = "client"; C.id = id; C.client = null; commentsSource = null; state = baseState; mbOffset = 0; calMonth = null;
+  C.view = "client"; C.id = id; C.client = null; commentsSource = null; photoSource = null; state = baseState; mbOffset = 0; calMonth = null;
   render();
   loadClient(id).then(function (cl) {
     if (C.id !== id) return;
-    C.client = cl; state = cl.state; commentsSource = coachComments(C.byId[id], cl); render();
+    C.client = cl; state = cl.state; commentsSource = coachComments(C.byId[id], cl); photoSource = coachPhotos(id, cl); render();
   }).catch(function (e) { if (C.id === id) { C.error = netMsg(e); C.client = { failed: true }; render(); } });
 }
-function openList() { C.view = "list"; C.id = null; C.client = null; commentsSource = null; state = baseState; render(); }
+function openList() { C.view = "list"; C.id = null; C.client = null; commentsSource = null; photoSource = null; state = baseState; render(); }
 function go(hash) { if (location.hash !== hash) location.hash = hash; else route(); }
 window.addEventListener("hashchange", route);
 
@@ -550,7 +564,7 @@ function tabMeals(body) {
 function tabBody(body) {
   var G = goals(), entries = state.body.slice();
   var shown = BODY_METRICS.filter(function (m) { return entries.some(function (b) { return b[m.k] != null; }); });
-  if (!shown.length) { body.appendChild(h("p", { class: "c-quiet", text: "No check-ins yet." })); return; }
+  if (!entries.length) { body.appendChild(h("p", { class: "c-quiet", text: "No check-ins yet." })); return; }
   var grid = h("div", { class: "c-grid" });
   shown.forEach(function (M) {
     var pts = entries.filter(function (b) { return b[M.k] != null; });
@@ -569,6 +583,11 @@ function tabBody(body) {
     grid.appendChild(card);
   });
   body.appendChild(grid);
+  var compare = photoCompare(entries);
+  if (compare) {
+    body.appendChild(h("h2", { class: "c-h2", text: "Progress photos" }));
+    body.appendChild(h("section", { class: "card c-photos" }, [compare]));
+  }
   body.appendChild(h("h2", { class: "c-h2", text: "Check-ins" }));
   var panel = h("div", { class: "c-roster c-log" });
   entries.slice().reverse().forEach(function (b) {
@@ -578,12 +597,31 @@ function tabBody(body) {
         h("p", { class: "c-metrics" }, BODY_METRICS.filter(function (m) { return b[m.k] != null; }).map(function (m) {
           return h("span", {}, [h("small", { text: m.label }), h("b", { text: mbFmt(b[m.k]) + (m.unit === "%" ? "%" : " " + m.unit) })]);
         })),
+        photoThumbs(b, entries),
         commentBlock("checkin", b.id, { cta: "Comment on this check-in", placeholder: "Your comment on this check-in…" })
       ])
     ]));
   });
   body.appendChild(panel);
 }
+/* ---------- progress photos (phase 5) ---------- */
+// The client's photos through short-lived links, asked for all at once and renewed before they expire.
+function coachPhotos(clientId, cl) {
+  var links = null, at = 0;
+  return {
+    url: function (name) {
+      if (!links || Date.now() - at > 50 * 60000) {
+        var paths = [];
+        cl.state.body.forEach(function (b) { photoNames(b.photos).forEach(function (n) { paths.push(clientId + "/" + n); }); });
+        at = Date.now();
+        links = paths.length ? coachApi.photoUrls(paths) : Promise.resolve({});
+        links.catch(function () { links = null; });
+      }
+      return links.then(function (m) { return m[clientId + "/" + name] || null; });
+    }
+  };
+}
+
 /* ---------- comments (phase 4) ---------- */
 function cmRow(r) {
   return { id: r.id, author: r.author_id, type: CM_TYPES[r.target_type] ? r.target_type : "general", ref: r.target_ref == null ? null : String(r.target_ref), body: String(r.body || ""), at: r.created_at, read: r.read_at || null };

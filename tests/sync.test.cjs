@@ -24,7 +24,7 @@ function fakeServer() {
   const pk = (t, r) => t === 'habit_days' ? r.client_id + '|' + r.date : t === 'client_settings' ? r.client_id + '|' + r.key : r.id;
   const s = {
     tables, offline: false, session: ME, profiles: new Map([[ME.id, { id: ME.id, full_name: 'Sara Ali', role: 'client' }]]),
-    links: [], refuse: () => false, requests: 0, pushes: new Map(),
+    links: [], refuse: () => false, requests: 0, pushes: new Map(), files: new Map(),
     // the coach writes in the thread (on the coach page)
     coachSays(body, type = 'general', ref = null, id = require('node:crypto').randomUUID()) {
       const now = s.now();
@@ -88,8 +88,16 @@ function fakeServer() {
       }
       return { data: null, error: { code: 'PGRST202', message: 'no such function' }, status: 404 };
     },
-    photos: async () => ({ data: [], error: null }),
-    removePhotos: async () => ({ data: [], error: null }),
+    // Storage: the progress bucket, '<user id>/<file name>' -> the file
+    photos: async uid => ({ data: [...s.files.keys()].filter(k => k.startsWith(uid + '/')).map(k => ({ id: k, name: k.split('/')[1] })), error: null }),
+    removePhotos: async paths => { if (s.offline) return down(); paths.forEach(p => s.files.delete(p)); return { data: [], error: null }; },
+    uploadPhoto: async (path, blob) => {
+      s.requests++;
+      if (s.offline) return { data: null, error: { name: 'StorageUnknownError', message: 'Failed to fetch' } };
+      if (!path.startsWith(s.session.id + '/')) return { data: null, error: { name: 'StorageApiError', status: 403, message: 'new row violates row-level security policy' } };
+      s.files.set(path, blob); return { data: { path }, error: null };
+    },
+    signedPhoto: async path => s.files.has(path) ? { data: { signedUrl: 'https://storage.example/' + path }, error: null } : { data: null, error: { status: 400, message: 'Object not found' } },
     addComment: async row => {
       s.requests++;
       if (s.offline) return down();
@@ -654,4 +662,151 @@ test('comments and notifications are in Arabic when the app is', async t => {
   fakeBrowserPush(a.w);
   a.doc.getElementById('t-plan').click(); await a.tick();
   assert.deepEqual(english(a.doc.querySelector('.notif-card')), []);
+});
+
+// ---- phase 5: progress photos ---------------------------------------------------------------------
+// The browser parts jsdom doesn't have: a photo store in memory (IndexedDB on a phone), shrinking a photo
+// (a canvas on a phone), object URLs, and fetching a signed link.
+function fakePhotos(w, server) {
+  const files = new Map(); let n = 0;
+  w.photoFiles = {
+    get: async k => files.get(k) || null,
+    put: async (k, b) => { files.set(k, b); },
+    del: async ks => { ks.forEach(k => files.delete(k)); },
+    keys: async () => [...files.keys()]
+  };
+  w.photoShrink = async f => new w.Blob([f.name], { type: 'image/webp' });
+  w.URL.createObjectURL = () => 'blob:photo/' + (++n);
+  w.URL.revokeObjectURL = () => {};
+  w.fetch = async url => { const b = server && server.files.get(String(url).replace('https://storage.example/', '')); return b ? { ok: true, blob: async () => b } : { ok: false }; };
+  return files;
+}
+// Pick a photo into one of the check-in form's slots, the way a change on the file input does.
+async function pick(a, pose, name) {
+  const i = { front: 0, side: 1, back: 2 }[pose];
+  const input = a.doc.querySelectorAll('.ph-file')[i];
+  Object.defineProperty(input, 'files', { configurable: true, value: [{ name }] });
+  input.dispatchEvent(new a.w.Event('change'));
+  await a.tick(); await a.tick();
+}
+async function checkIn(a, date, kg, poses) {
+  a.doc.getElementById('t-body').click();
+  const card = [...a.doc.querySelectorAll('.card')].find(c => c.querySelector('.ph-slots'));
+  card.querySelector('input[type=date]').value = date;
+  if (kg != null) card.querySelector('input[inputmode=decimal]').value = String(kg);
+  for (const p of poses) await pick(a, p, p + '.jpg');
+  card.lastElementChild.click();  // Save check-in (found by place: it's translated in Arabic)
+  await a.tick(); await a.tick();
+}
+const NAME = /^\d{4}-\d\d-\d\d-[0-9a-f-]{36}\.webp$/;
+
+test('progress photos: taken with a check-in, kept on the phone, uploaded with sync, compared before and after', async t => {
+  const { server, a } = await coached(t);
+  const phone = fakePhotos(a.w, server);
+  await checkIn(a, '2026-11-01', 75.4, ['front', 'side']);
+  const first = a.local().body.at(-1);
+  assert.deepEqual(Object.keys(first.photos).sort(), ['front', 'side']);
+  assert.ok(Object.values(first.photos).every(n => NAME.test(n) && n.startsWith('2026-11-01-')), 'named by date, made on the phone');
+  assert.equal(phone.size, 2, 'kept on the phone first');
+  await a.w.syncNow(); await a.settle();
+  assert.deepEqual([...server.files.keys()].sort(), Object.values(first.photos).map(n => ME.id + '/' + n).sort(), 'uploaded to her own folder');
+  assert.deepEqual(server.rows('body_checkins')[0].photos, first.photos, 'and the check-in points at them');
+  assert.equal(a.w.syncPending(), 0);
+
+  // a photo-only check-in later: now there is something to compare
+  await checkIn(a, '2026-11-24', null, ['front']);
+  a.doc.getElementById('t-body').click();
+  const cmp = a.doc.querySelector('.ph-compare');
+  assert.ok(cmp, 'a before/after view on Progress');
+  assert.deepEqual([...cmp.querySelectorAll('.ph-poses button')].map(b => b.textContent), ['Front', 'Side']);
+  assert.deepEqual([...cmp.querySelectorAll('select')].map(s => s.options[s.selectedIndex].textContent), ['Sun 1 Nov', 'Tue 24 Nov']);
+  assert.match(cmp.querySelector('.ph-caps').textContent, /Before Sun 1 Nov · 75\.4 kg.*After Tue 24 Nov/);
+  const range = cmp.querySelector('.ph-range');
+  range.value = '30'; range.dispatchEvent(new a.w.Event('input'));
+  assert.equal(cmp.querySelector('.ph-top').style.clipPath, 'inset(0 0 0 30%)');
+  // only one side photo: it shows alone, with a word about comparing
+  cmp.querySelectorAll('.ph-poses button')[1].click();
+  assert.match(a.doc.querySelector('.ph-compare').textContent, /Add another check-in with a side photo to compare\./);
+  // the history shows small pictures that open large
+  const thumbs = a.doc.querySelectorAll('.item-ph .ph-thumb');
+  assert.equal(thumbs.length, 3);
+  thumbs[0].click(); await a.tick();
+  assert.ok(!a.doc.getElementById('modal').hidden);
+  assert.match(a.doc.querySelector('#mbox .ph-cap').textContent, /Tue 24 Nov|Sun 1 Nov/);
+});
+
+test("removing a check-in deletes its photos from the account and the phone, after Undo's minute", async t => {
+  const { server, a } = await coached(t);
+  const phone = fakePhotos(a.w, server);
+  await checkIn(a, '2026-11-10', 74, ['front']);
+  await a.w.syncNow(); await a.settle();
+  const entry = a.local().body.at(-1), path = ME.id + '/' + entry.photos.front;
+  assert.ok(server.files.has(path));
+  // removed, then put back with Undo: nothing is lost
+  a.w.removeWithUndo('body', a.w.state.body.find(b => b.id === entry.id), 'Check-in');
+  await a.w.syncNow(); await a.settle();
+  a.doc.querySelector('#toast .toast-act').click();
+  await a.w.syncNow(); await a.settle();
+  assert.ok(server.files.has(path) && phone.size === 1, 'still there after Undo');
+  assert.equal(server.rows('body_checkins')[0].deleted_at, null);
+  // removed for good: once the minute is up it goes from the account and the phone
+  a.w.removeWithUndo('body', a.w.state.body.find(b => b.id === entry.id), 'Check-in');
+  await a.w.syncNow(); await a.settle();
+  assert.ok(server.files.has(path), 'kept during the minute Undo is offered');
+  a.w.PHOTO_GRACE = 0;
+  await a.w.syncNow(); await a.settle();
+  assert.ok(!server.files.has(path), 'deleted from the account');
+  assert.equal(phone.size, 0, 'and from the phone');
+  assert.ok(server.rows('body_checkins')[0].deleted_at, 'with the check-in');
+});
+
+test('photos taken on another phone are fetched once through a short-lived link, then kept for offline', async t => {
+  const server = fakeServer(), name = '2026-11-20-' + '12345678-1234-4123-8123-123456789abc' + '.webp';
+  server.write('body_checkins', { id: '55555555-5555-4555-8555-555555555555', client_id: ME.id, date: '2026-11-20', kg: 73.5, photos: { front: name } });
+  const a = app(t, server);
+  const phone = fakePhotos(a.w, server);
+  server.files.set(ME.id + '/' + name, new a.w.Blob(['jpg'], { type: 'image/webp' }));
+  await a.signIn();
+  a.doc.getElementById('t-body').click();
+  await a.settle(); await a.tick(); await a.tick();
+  const img = a.doc.querySelector('.item-ph img');
+  assert.match(img.getAttribute('src') || '', /^blob:photo\//, 'shown from the copy it fetched');
+  assert.ok(phone.has(name), 'and kept on this phone');
+  assert.equal(server.files.size, 1, 'nothing uploaded twice');
+  assert.equal(a.w.syncPending(), 0);
+});
+
+test('without an account, photos stay on the phone; files no check-in uses are cleared at start', async t => {
+  const server = fakeServer(), a = app(t, server);
+  const phone = fakePhotos(a.w, server);
+  await checkIn(a, '2026-11-12', 76, ['back']);
+  const entry = a.local().body.at(-1);
+  assert.deepEqual(Object.keys(entry.photos), ['back']);
+  assert.equal(phone.size, 1);
+  assert.equal(server.requests, 0, 'nothing went anywhere');
+  assert.match(a.doc.querySelector('.ph-field .note').textContent, /Kept on this phone only/);
+  phone.set('2026-01-01-00000000-0000-4000-8000-000000000000.webp', new a.w.Blob(['old']));
+  await a.w.photoGc();
+  assert.deepEqual([...phone.keys()], [entry.photos.back], 'only the photo a check-in uses stays');
+  // signing in and adding this phone's data to the account takes the photo up too
+  await a.signIn();
+  assert.ok(a.w.sync.ask);
+  a.w.closeModal(); a.w.syncAdopt(true); await a.settle();
+  assert.ok(server.files.has(ME.id + '/' + entry.photos.back));
+  // signing out and clearing the phone clears its photos as well
+  await a.w.syncSignOut(true); await a.settle(); await a.tick();
+  assert.equal(phone.size, 0);
+});
+
+test('progress photos are in Arabic when the app is', async t => {
+  const { server, a } = await coached(t, { sessions: [], lang: 'ar' });
+  fakePhotos(a.w, server);
+  await checkIn(a, '2026-11-01', 75.4, ['front']);
+  await checkIn(a, '2026-11-24', 72.9, ['front']);
+  a.doc.getElementById('t-body').click(); await a.tick();
+  const english = root => [...root.querySelectorAll('*')].filter(n => !n.children.length && /[A-Za-z]{2}/.test(n.textContent) && !/[؀-ۿ]/.test(n.textContent) && !n.closest('[translate=no]')).map(n => n.textContent);
+  const labels = root => [...root.querySelectorAll('[aria-label],[alt]')].map(n => n.getAttribute('aria-label') || n.getAttribute('alt')).filter(v => /[A-Za-z]{2}/.test(v) && !/[؀-ۿ]/.test(v));
+  const photos = [a.doc.querySelector('.ph-compare'), a.doc.querySelector('.ph-field'), ...a.doc.querySelectorAll('.item-ph')];
+  photos.forEach(el => { assert.ok(el); assert.deepEqual(english(el), []); assert.deepEqual(labels(el), []); });
+  assert.match(a.doc.querySelector('.ph-caps').textContent, /قبل.*نوفمبر.*بعد/);
 });

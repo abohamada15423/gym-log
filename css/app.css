@@ -2654,3 +2654,60 @@ button.coach-name:focus-visible { outline: 2px solid var(--accent); outline-offs
 .rem-days .btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
 .rem-time { display: flex; align-items: center; gap: 10px; font-weight: 700 }
 .rem-time input { width: auto; max-width: 9.5em; padding: 10px 12px }
+
+/* ---------- progress photos (phase 5) ---------- */
+/* three slots in the check-in form: steel dashes until a photo is in, then the photo itself */
+.ph-field { display: flex; flex-direction: column; gap: 8px }
+.ph-label { font-size: .85rem; font-weight: 700; color: var(--muted) }
+.ph-slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px }
+.ph-cell { position: relative; min-width: 0 }
+.ph-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none }
+.ph-slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; width: 100%; aspect-ratio: 3 / 4;
+  padding: 0; border-radius: 14px; border: 1.5px dashed var(--surface-3); background: var(--bg); color: var(--muted); cursor: pointer; overflow: hidden }
+.ph-slot:focus-visible, .ph-thumb:focus-visible, .ph-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.ph-cam svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round }
+.ph-pose { font: 700 .8rem var(--f-body) }
+.ph-slot.filled { border: 0; cursor: default }
+.ph-slot.filled img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover }
+.ph-slot.filled .ph-pose { position: absolute; inset-inline-start: 6px; bottom: 6px; padding: 2px 8px; border-radius: 999px; background: rgba(21, 22, 25, .78); color: var(--ink) }
+.ph-slot.busy { opacity: .55 }
+.ph-x { position: absolute; top: 6px; inset-inline-end: 6px; width: 28px; height: 28px; border-radius: 50%; border: 0; padding: 0; display: grid; place-items: center;
+  background: rgba(21, 22, 25, .78); color: var(--ink); font-size: .85rem; cursor: pointer }
+
+/* a photo wherever it shows: filled in when its file is ready */
+.ph-frame { position: relative; display: block; width: 100%; height: 100%; background: var(--surface-2); overflow: hidden }
+.ph-frame img { display: block; width: 100%; height: 100%; object-fit: cover }
+.ph-frame.loading img, .ph-frame.missing img { visibility: hidden }
+.ph-missing { display: none }
+.ph-frame.missing .ph-missing { position: absolute; inset: 0; display: grid; place-items: center; padding: 8px; text-align: center; font-size: .74rem; color: var(--muted) }
+.ph-thumbs { display: flex; gap: 6px }
+.ph-thumb { width: 54px; aspect-ratio: 3 / 4; padding: 0; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--surface-2); cursor: pointer }
+.item:has(+ .item-ph) { border-bottom: 0 }
+.item-ph { padding: 0 0 12px; border-bottom: 1px solid var(--line) }
+.item-ph:last-child { border-bottom: 0 }
+.item-ph:has(+ .item-cm) { border-bottom: 0; padding-bottom: 10px }
+.ph-view { border-radius: 14px; overflow: hidden; background: #0f1012 }
+.ph-view .ph-frame { height: auto; min-height: 240px; background: #0f1012 }
+.ph-view img { height: auto; max-height: 72vh; object-fit: contain }
+.ph-cap { margin: 0; color: var(--muted); font-size: .88rem }
+
+/* before and after: the later photo wipes over the earlier one, along a lime line */
+.ph-compare { display: flex; flex-direction: column; gap: 10px }
+.ph-poses { margin-bottom: 0 }
+.ph-stage { position: relative; aspect-ratio: 3 / 4; max-height: 72vh; border-radius: 16px; overflow: hidden; background: #0f1012;
+  touch-action: pan-y; user-select: none; -webkit-user-select: none; cursor: ew-resize }
+.ph-stage .ph-frame, .ph-top { position: absolute; inset: 0; background: #0f1012 }
+.ph-stage img, .ph-view img { object-fit: contain }
+.ph-stage.one { cursor: default }
+.ph-line { position: absolute; top: 0; bottom: 0; width: 2px; margin-inline-start: -1px; background: var(--accent); pointer-events: none }
+.ph-line i { position: absolute; top: 50%; inset-inline-start: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(21, 22, 25, .55) }
+[dir="rtl"] .ph-line i { margin: -15px -15px 0 0 }
+.ph-tag { position: absolute; top: 10px; padding: 3px 9px; border-radius: 999px; background: rgba(21, 22, 25, .78); color: var(--ink); font: 700 .76rem var(--f-body); pointer-events: none }
+.ph-tag.before { inset-inline-start: 10px }
+.ph-tag.after { inset-inline-end: 10px }
+.ph-range { width: 100%; margin: 0; accent-color: var(--accent) }
+.ph-caps { display: flex; justify-content: space-between; gap: 10px; font-size: .84rem; color: var(--muted) }
+.ph-caps span:last-child { text-align: end }
+.ph-caps b { color: var(--ink) }
+.ph-stage img { -webkit-user-drag: none }
