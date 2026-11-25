@@ -313,9 +313,9 @@ dbTest("the coach's private notes stay private", async () => {
   assert.equal((await rows(alice, 'select body from public.coach_notes')).length, 0);
   assert.equal((await rows(coach2, 'select body from public.coach_notes')).length, 0);
   await assert.rejects(upsert(coach2, 'coach_notes', { coach_id: coach2.id, client_id: alice.id, body: 'x' }, ['coach_id', 'client_id']), /row-level security|violates/);
-  // and nothing private is in the link row the client can read
+  // and nothing private is in the link row the client can read (paid_until is hers to know, from phase 6)
   const cols = Object.keys((await rows(alice, 'select * from public.coach_clients'))[0]);
-  assert.deepEqual(cols.sort(), ['client_id', 'coach_id', 'created_at', 'started_at', 'status', 'updated_at']);
+  assert.deepEqual(cols.sort(), ['client_id', 'coach_id', 'created_at', 'paid_until', 'started_at', 'status', 'updated_at']);
 });
 
 dbTest('comments: each person edits only their own; read receipts only through mark_comments_read', async () => {
@@ -597,4 +597,117 @@ dbTest('the progress bucket takes small photos only, and stays private', async (
   assert.deepEqual([b.public, Number(b.file_size_limit), b.allowed_mime_types], [false, 2097152, ['image/webp', 'image/jpeg']]);
   // the photo check is for the table's own use; visitors can't reach it
   await assert.rejects(as('anon', 'select private.valid_photos(null)'), /permission denied/);
+});
+
+// ---- phase 6: subscriptions (0005_subscriptions.sql) ------------------------------------------
+const cairoToday = async () => (await db.query("select (now() at time zone 'Africa/Cairo')::date::text as d")).rows[0].d;
+const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const paidUntil = async () => (await db.query('select paid_until::text as p from public.coach_clients where coach_id = $1 and client_id = $2', [coach.id, alice.id])).rows[0].p;
+const setPaid = d => db.query('update public.coach_clients set paid_until = $1 where coach_id = $2 and client_id = $3', [d, coach.id, alice.id]);
+
+dbTest('payments: only the coach records them, each one runs on from the last paid day, and both of them see them', async () => {
+  const today = await cairoToday();
+  assert.equal(await paidUntil(), null, 'not tracked until the first payment');
+  const first = (await rows(coach, "select public.record_payment($1, 1500, 30, 'instapay', ' November ')::text as d", [alice.id]))[0].d;
+  assert.equal(first, addDays(today, 29));
+  const second = (await rows(coach, "select public.record_payment($1, 4000, 90, 'vodafone_cash')::text as d", [alice.id]))[0].d;
+  assert.equal(second, addDays(today, 119), 'the next one starts the day after the last paid day');
+  assert.equal(await paidUntil(), second);
+  const seen = await rows(alice, 'select amount::text, method, days, note from public.payments order by ends_on');
+  assert.deepEqual(seen, [{ amount: '1500.00', method: 'instapay', days: 30, note: 'November' }, { amount: '4000.00', method: 'vodafone_cash', days: 90, note: null }]);
+  assert.equal((await rows(bob, 'select id from public.payments')).length, 0, 'nobody else sees them');
+  // only through the function, only the coach, and only sensible payments
+  await assert.rejects(as(alice, "select public.record_payment($1, 0, 30, 'cash')", [alice.id]), /Only their coach/);
+  await assert.rejects(as(bob, "select public.record_payment($1, 100, 30, 'cash')", [alice.id]), /Only their coach/);
+  await assert.rejects(as(coach, "select public.record_payment($1, 100, 0, 'cash')", [alice.id]), /1 to 366 days/);
+  await assert.rejects(as(coach, "select public.record_payment($1, -5, 30, 'cash')", [alice.id]), /Check the amount/);
+  await assert.rejects(as(coach, "select public.record_payment($1, 100, 30, 'paypal')", [alice.id]), /Choose how they paid/);
+  await assert.rejects(as(coach, "insert into public.payments (coach_id, client_id, amount, method, days, starts_on, ends_on) values ($1, $2, 1, 'cash', 1, now(), now())", [coach.id, alice.id]), /permission denied/);
+  await assert.rejects(as(coach, "update public.coach_clients set paid_until = '2099-01-01' where client_id = $1", [alice.id]), /permission denied/);
+  await assert.rejects(as('anon', "select public.record_payment($1, 1, 1, 'cash')", [alice.id]), /permission denied/);
+});
+
+dbTest('taking back a payment: only the latest, and the subscription ends where the one before it ended', async () => {
+  const pays = await rows(coach, 'select id, ends_on::text as e from public.payments where client_id = $1 and deleted_at is null order by ends_on', [alice.id]);
+  await assert.rejects(as(coach, 'select public.withdraw_payment($1)', [pays[0].id]), /Only the latest/);
+  await assert.rejects(as(alice, 'select public.withdraw_payment($1)', [pays[1].id]), /No such payment/);
+  assert.equal((await rows(coach, 'select public.withdraw_payment($1)::text as d', [pays[1].id]))[0].d, pays[0].e);
+  assert.equal(await paidUntil(), pays[0].e);
+  assert.equal((await rows(alice, 'select id from public.payments where deleted_at is null')).length, 1);
+});
+
+dbTest('after the last paid day the coach sees only what came before it and can send nothing; a payment brings it all back', async () => {
+  const today = await cairoToday(), last = addDays(today, -10);
+  await setPaid(last);
+  const old = uuid(), fresh = uuid();
+  await upsert(alice, 'workout_sessions', { id: old, client_id: alice.id, date: addDays(today, -12), sets: {} });
+  await upsert(alice, 'workout_sessions', { id: fresh, client_id: alice.id, date: addDays(today, -2), sets: {} });
+  await upsert(alice, 'food_logs', { id: uuid(), client_id: alice.id, date: addDays(today, -1), name: 'Rice', kcal: 300 });
+  await upsert(alice, 'body_checkins', { id: uuid(), client_id: alice.id, date: addDays(today, -1), kg: 71 });
+  await upsert(alice, 'habit_days', { client_id: alice.id, date: addDays(today, -1), data: { water: 3 } }, ['client_id', 'date']);
+  const coachSees = async table => (await rows(coach, `select count(*)::int as n from public.${table} where client_id = $1 and date > $2`, [alice.id, last]))[0].n;
+  const ids = (await rows(coach, 'select id from public.workout_sessions where client_id = $1', [alice.id])).map(r => r.id);
+  assert.ok(ids.includes(old) && !ids.includes(fresh), 'the workout from before, not the one after');
+  for (const t of ['food_logs', 'body_checkins', 'habit_days']) assert.equal(await coachSees(t), 0, t);
+  assert.ok((await rows(alice, 'select id from public.workout_sessions')).some(r => r.id === fresh), 'the client sees all of hers');
+  // her new comment waits for the next payment, and doesn't wake the coach
+  await clearCalls();
+  await as(alice, "insert into public.comments (client_id, body) values ($1, 'Are you there?')", [alice.id]);
+  assert.equal((await rows(coach, "select id from public.comments where body = 'Are you there?'")).length, 0);
+  assert.equal((await sentJobs()).filter(j => j.user === coach.id).length, 0);
+  // photos by their day, like the log
+  await as(alice, "insert into storage.objects (bucket_id, name) values ('progress', $1), ('progress', $2)", [`${alice.id}/${addDays(today, -11)}-a.webp`, `${alice.id}/${addDays(today, -1)}-b.webp`]);
+  const files = (await rows(coach, "select name from storage.objects where name like $1", [alice.id + '/%'])).map(r => r.name);
+  assert.ok(files.includes(`${alice.id}/${addDays(today, -11)}-a.webp`) && !files.includes(`${alice.id}/${addDays(today, -1)}-b.webp`));
+  // nothing new from the coach
+  await assert.rejects(upsert(coach, 'programs', { id: uuid(), coach_id: coach.id, client_id: alice.id, name: 'Late', days: [] }), DENIED);
+  await assert.rejects(upsert(coach, 'meal_plans', { id: uuid(), coach_id: coach.id, client_id: alice.id, name: 'Late', targets: {} }), DENIED);
+  await assert.rejects(as(coach, "insert into public.comments (client_id, body) values ($1, 'Hello?')", [alice.id]), DENIED);
+  // still theirs: who she is, her goals, the coach's own notes and templates
+  assert.equal((await rows(coach, 'select id from public.profiles where id = $1', [alice.id])).length, 1);
+  assert.ok((await rows(coach, 'select key from public.client_settings where client_id = $1', [alice.id])).length > 0);
+  await upsert(coach, 'programs', { id: uuid(), coach_id: coach.id, client_id: null, name: 'Template while waiting', days: [] });
+  // a payment: from today (the days in between aren't charged), and the coach sees what she logged meanwhile
+  assert.equal((await rows(coach, "select public.record_payment($1, 1500, 30, 'cash')::text as d", [alice.id]))[0].d, addDays(today, 29));
+  assert.ok((await rows(coach, 'select id from public.workout_sessions where client_id = $1', [alice.id])).some(r => r.id === fresh));
+  assert.equal((await rows(coach, "select id from public.comments where body = 'Are you there?'")).length, 1);
+  await upsert(coach, 'programs', { id: uuid(), coach_id: coach.id, client_id: alice.id, name: 'Back on track', days: [] });
+});
+
+dbTest('renewal reminders: three days before and the day after, once each, to the client and the coach', async () => {
+  const today = await cairoToday(), run = async () => (await db.query('select private.send_renewals() as n')).rows[0].n;
+  await setPaid(addDays(today, 3));
+  await clearCalls();
+  assert.equal(await run(), 1);
+  let jobs = await sentJobs();
+  assert.deepEqual(jobs.map(j => [j.user, j.lang, j.title, j.url]).sort(), [
+    [alice.id, 'ar', 'اشتراكك مع الكابتن بيخلص بعد ٣ أيام', './'],
+    [coach.id, 'en', 'Alice A.', `coach.html#client=${alice.id}&tab=payments`]
+  ].sort());
+  assert.equal(jobs.find(j => j.user === coach.id).body, 'Subscription ends in 3 days');
+  assert.equal(await run(), 0, 'once');
+  await setPaid(addDays(today, -1));
+  await clearCalls();
+  assert.equal(await run(), 1);
+  jobs = await sentJobs();
+  assert.deepEqual(jobs.map(j => j.title).sort(), ['Alice A.', 'اشتراكك مع الكابتن خلص'].sort());
+  // a paused client isn't reminded; a subscription ending another day isn't either
+  await setPaid(addDays(today, 3));
+  await db.query("update public.coach_clients set status = 'paused' where client_id = $1", [alice.id]);
+  await db.query('delete from private.renewals_sent');
+  assert.equal(await run(), 0);
+  await db.query("update public.coach_clients set status = 'active' where client_id = $1", [alice.id]);
+  await setPaid(addDays(today, 10));
+  assert.equal(await run(), 0);
+  assert.deepEqual((await db.query("select schedule, command from cron.job where jobname = 'gymlog-renewals'")).rows, [{ schedule: '7 7 * * *', command: 'select private.send_renewals()' }]);
+  await assert.rejects(as(alice, 'select private.send_renewals()'), /permission denied/);
+});
+
+dbTest('coming back through a new invite starts afresh: an old subscription does not carry over', async () => {
+  await setPaid('2020-01-31');
+  await as(alice, "update public.coach_clients set status = 'archived'");
+  const again = (await rows(coach, 'select public.create_invite() as code'))[0].code;
+  await as(alice, 'select public.accept_invite($1)', [again]);
+  assert.equal(await paidUntil(), null);
+  assert.ok((await rows(coach, 'select id from public.workout_sessions where client_id = $1', [alice.id])).length > 0, 'the coach sees her log again');
 });

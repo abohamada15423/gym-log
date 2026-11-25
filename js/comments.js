@@ -7,6 +7,7 @@
 //   send(type, ref, body)   Promise; the comment shows straight away
 //   remove(id)              Promise; only your own
 //   seen(ids)               the viewer has now seen these (only the other person's comments count)
+//   canWrite()              optional: false while writing is closed (a coach whose client's subscription ended)
 // A comment is about a workout (type "session", ref its id), a day of meals ("food_day", ref the date),
 // a check-in ("checkin", ref its id) or nothing in particular ("general").
 // Classic script sharing the page's global scope.
@@ -15,6 +16,7 @@ var commentsSource = null;
 var CM_TYPES = { session: 1, food_day: 1, checkin: 1, general: 1 };
 
 function cmAll() { return commentsSource ? commentsSource.all() : []; }
+function cmCanWrite() { return !!commentsSource && (!commentsSource.canWrite || commentsSource.canWrite()); }
 function cmMine(c) { return !!commentsSource && c.author === commentsSource.me(); }
 function cmOn(type, ref) { return cmAll().filter(function (c) { return c.type === type && c.ref === ref; }); }
 function cmUnread(list) { return (list || cmAll()).filter(function (c) { return !cmMine(c) && !c.read; }); }
@@ -56,7 +58,7 @@ function cmNote(c, opts) {
   // what people wrote: never translated, and laid out in its own direction (English in the Arabic app too)
   note.appendChild(h("p", { class: "cm-body", translate: "no", dir: "auto", text: c.body }));
   var acts = [];
-  if (opts.reply && !mine && c.type !== "general") {
+  if (opts.reply && !mine && c.type !== "general" && cmCanWrite()) {
     var rep = h("button", { class: "linkbtn", type: "button", text: "Reply" });
     rep.onclick = function () { opts.reply(c); };
     acts.push(rep);
@@ -107,6 +109,7 @@ function commentBlock(type, ref, opts) {
     box.textContent = "";
     var list = cmOn(type, ref);
     list.forEach(function (c) { box.appendChild(cmNote(c, { repaint: function () { paint(false); } })); });
+    if (!cmCanWrite()) return;  // read only: what was said stays, nothing new can be added
     if (writing) {
       var f = cmComposer({ placeholder: opts.placeholder, target: function () { return { type: type, ref: ref }; }, sent: function () { paint(false); if (opts.changed) opts.changed(); } });
       var cancel = h("button", { class: "linkbtn", type: "button", text: "Cancel" });
@@ -166,7 +169,8 @@ function commentThread(opts) {
   paint();
   wrap.appendChild(log);
   wrap.appendChild(toLine);
-  wrap.appendChild(form);
+  if (cmCanWrite()) wrap.appendChild(form);
+  else if (opts.locked) wrap.appendChild(h("p", { class: "cm-empty", text: opts.locked }));
   wrap.repaint = function () { var end = log.scrollHeight - log.scrollTop - log.clientHeight < 40; paint(); if (end) toEnd(); };
   wrap.toEnd = toEnd;
   wrap.input = form.input;

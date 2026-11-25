@@ -12,6 +12,7 @@ const MONA = '53000000-0000-4000-8000-000000000003', YOUSSEF = '54000000-0000-40
 const plain = v => JSON.parse(JSON.stringify(v));
 const day = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const ago = n => new Date(Date.now() - n * 864e5).toISOString();
+const addDay = (ymd, n) => { const d = new Date(ymd + 'T12:00:00'); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 
 function fixture() {
   const push = { 'Bench press': [[60, 8], [60, 8], [62.5, 6]], 'Overhead press': [[35, 8], [35, 8]] };
@@ -78,6 +79,24 @@ function fakeApi(db, opts = {}) {
     markRead: async (client, ids) => {
       calls.push(['markRead', client, plain(ids).sort()]);
       db.comments.forEach(c => { if (c.client_id === client && ids.includes(c.id) && c.author_id !== COACH.id && !c.read_at) c.read_at = new Date().toISOString(); });
+    },
+    // subscriptions, like record_payment() and withdraw_payment() in 0005_subscriptions.sql
+    payments: async id => (db.payments || []).filter(p => p.client_id === id && !p.deleted_at).sort((a, b) => a.ends_on < b.ends_on ? 1 : -1).map(plain),
+    monthPayments: async (me, since) => (db.payments || []).filter(p => !p.deleted_at && p.created_at >= since).map(plain),
+    recordPayment: async (id, amount, days, method, note) => {
+      calls.push(['recordPayment', id, amount, days, method, note]);
+      const link = db.links.find(l => l.client_id === id), t = day(0), from = link.paid_until && link.paid_until >= t ? addDay(link.paid_until, 1) : t;
+      const ends = addDay(from, days - 1);
+      (db.payments = db.payments || []).push({ id: 'pay-' + (db.payments.length + 1), client_id: id, amount, method, days, starts_on: from, ends_on: ends, note: note || null, created_at: new Date().toISOString() });
+      link.paid_until = ends;
+      return ends;
+    },
+    withdrawPayment: async pid => {
+      calls.push(['withdrawPayment', pid]);
+      const p = db.payments.find(x => x.id === pid); p.deleted_at = new Date().toISOString();
+      const left = db.payments.filter(x => x.client_id === p.client_id && !x.deleted_at).map(x => x.ends_on).sort();
+      db.links.find(l => l.client_id === p.client_id).paid_until = left.length ? left[left.length - 1] : null;
+      return db.links.find(l => l.client_id === p.client_id).paid_until;
     },
     photoUrls: async paths => { calls.push(['photoUrls', paths.length]); return Object.fromEntries(paths.map(p => [p, 'https://storage.example/signed/' + p])); },
     savePush: async row => { calls.push(['savePush', row.user_id, row.endpoint, row.lang]); },
@@ -262,7 +281,7 @@ test('signing in, and an account that is not a coach is told so', async t => {
 });
 
 test('the dashboard is fully in Arabic when chosen', async t => {
-  const p = page(t, fakeApi(withPhotos(withComments(fixture()))), { lang: 'ar' });
+  const p = page(t, fakeApi(withPayments(withPhotos(withComments(fixture())))), { lang: 'ar' });
   await p.settle();
   // names, emails, codes and the exercises and foods people typed stay as written
   // text still in English: Latin words and no Arabic at all (a translated line may carry a name)
@@ -270,7 +289,7 @@ test('the dashboard is fully in Arabic when chosen', async t => {
     && !n.closest('[translate=no], svg, .c-exname, .c-sets small, .c-sets span')).map(n => n.textContent);
   assert.equal(p.doc.documentElement.dir, 'rtl');
   assert.deepEqual(english(), []);
-  for (const tab of ['summary', 'comments', 'workouts', 'meals', 'body', 'program', 'mealplan', 'notes']) {
+  for (const tab of ['summary', 'comments', 'workouts', 'meals', 'body', 'program', 'mealplan', 'payments', 'notes']) {
     await p.go('#client=' + SARA + '&tab=' + tab);
     assert.deepEqual(english().filter(x => !/^(Bench press|Overhead press|Pull-ups|Squat)$/.test(x)), [], tab);
   }
@@ -537,4 +556,63 @@ test("the client's progress photos on the Body tab: thumbnails, and before and a
   // nobody else's photos, and none for a client without any
   await p.go('#client=' + OMAR + '&tab=body');
   assert.equal(p.doc.querySelector('.ph-compare'), null);
+});
+
+// ---- phase 6: subscriptions ---------------------------------------------------------------------
+// Sara paid until two days from now; one payment on record.
+function withPayments(db) {
+  const link = db.links.find(l => l.client_id === SARA);
+  link.paid_until = addDay(day(0), 2);
+  db.payments = [{ id: 'pay-0', client_id: SARA, amount: 1500, method: 'instapay', days: 30, starts_on: addDay(day(0), -27), ends_on: link.paid_until, note: 'November', created_at: ago(27) }];
+  return db;
+}
+
+test('subscriptions: ending soon is a flag, ended is its own group and read only; a payment brings a client back', async t => {
+  const db = fixture(), api = fakeApi(db);
+  db.links.find(l => l.client_id === SARA).paid_until = day(5);   // her last payment ran out five days ago
+  db.payments = [{ id: 'pay-0', client_id: SARA, amount: 1500, method: 'cash', days: 30, starts_on: day(34), ends_on: day(5), note: null, created_at: ago(34) }];
+  db.links.find(l => l.client_id === MONA).paid_until = addDay(day(0), 2);
+  const p = page(t, api);
+  await p.settle();
+  const groups = p.rows();
+  assert.deepEqual(groups.map(g => g.title), ['Needs you', 'Subscription ended', 'Paused']);
+  assert.match(p.doc.querySelector('.c-lead').textContent, /clients? needs? you today\. 1 subscription has ended\./);
+  assert.match(groups[0].rows.find(r => /Mona/.test(r)), /Subscription ends in 2 days/);
+  assert.match(groups[1].rows[0], /Sara Ali.*Subscription ended 5 days ago/);
+  assert.doesNotMatch(groups[1].rows[0], /No workout|Protein/, 'no flags judged on a log the coach no longer sees in full');
+
+  // her page: what it means, and nothing can be sent
+  await p.go('#client=' + SARA + '&tab=program');
+  assert.match(p.doc.querySelector('.c-ended').textContent, /Subscription ended 5 days ago.*Record a payment/);
+  assert.match(p.doc.querySelector('.c-locked').textContent, /Record a payment to send them a program/);
+  assert.equal(p.doc.querySelector('.c-start'), null);
+  await p.go('#client=' + SARA + '&tab=comments');
+  assert.equal(p.doc.querySelector('.cm-thread form'), null, 'no writing');
+  assert.match(p.doc.querySelector('.cm-thread').textContent, /Record a payment to write to them again/);
+  await p.go('#client=' + SARA + '&tab=workouts');
+  assert.equal(p.doc.querySelector('.cm-open'), null, 'no comments under workouts either');
+
+  // a payment for three months, by Vodafone Cash
+  p.click('Record a payment');
+  const sheet = p.doc.querySelector('.pay-sheet');
+  [...sheet.querySelectorAll('.mchips button')].find(b => b.textContent === '3 months').click();
+  sheet.querySelector('input[inputmode=decimal]').value = '4000';
+  sheet.querySelector('select').value = 'vodafone_cash';
+  assert.match(sheet.textContent, /Paid until/);
+  [...sheet.querySelectorAll('button')].find(b => b.textContent === 'Record payment').click();
+  await p.settle(10);
+  assert.deepEqual(api.calls.filter(c => c[0] === 'recordPayment'), [['recordPayment', SARA, 4000, 90, 'vodafone_cash', '']]);
+  assert.equal(p.doc.querySelector('.c-ended'), null, 'back to normal');
+  assert.ok(p.doc.querySelector('.cm-open'), 'comments open again');
+  await p.go('#client=' + SARA + '&tab=payments');
+  assert.match(p.doc.querySelector('.c-tab').textContent, /Paid until .*4,000 EGP.*Vodafone Cash.*90 days: .* to .*Take back/);
+  await p.go('#');
+  assert.match(p.doc.querySelector('.c-head').textContent, /Recorded this month: 4,000 EGP/);
+  assert.ok(!p.rows().some(g => g.title === 'Subscription ended'));
+  // taken back by mistake: ended again
+  await p.go('#client=' + SARA + '&tab=payments');
+  p.click('Take back'); await p.settle(10);
+  const recorded = db.payments.find(x => x.amount === 4000);
+  assert.deepEqual(api.calls.filter(c => c[0] === 'withdrawPayment'), [['withdrawPayment', recorded.id]]);
+  assert.ok(p.doc.querySelector('.c-ended'), 'back to where the payment before it ended');
 });

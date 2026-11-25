@@ -8,6 +8,7 @@
 | `migrations/0002_delete_account.sql` | `delete_my_account()`: كل واحد يمسح حسابه وكل بياناته (المرحلة ١) |
 | `migrations/0003_comments_push.sql` | التعليقات (إيصال القراية، وصندوق الكابتن)، واشتراكات الإشعارات، والإشعار اللي بيتبعت لكل حدث، وتذكير أيام التمرين (المرحلة ٤) |
 | `migrations/0004_progress_photos.sql` | صور التقدّم: ٣ صور لكل قياس (`photos`)، وأسماء الملفات متشيّكة، والـ bucket بيقبل صور بس و٢ ميجا بالكتير (المرحلة ٥) |
+| `migrations/0005_subscriptions.sql` | الاشتراكات: `payments` و`paid_until`، و`record_payment()` و`withdraw_payment()`، والكابتن بيشوف لحد آخر يوم مدفوع بس، وتذكير التجديد (المرحلة ٦) |
 | `functions/push/` | الـ Edge Function اللي بتشفّر الإشعار وتبعته (Web Push بـ VAPID). `index.ts` للنشر، والشغل في `handler.mjs` و`webpush.mjs` |
 | `tests/rls.test.cjs` | اختبارات بتثبت كل قاعدة صلاحية على Postgres محلي |
 | `tests/supabase_stub.sql` | نسخة مصغّرة من Supabase للاختبارات بس. **ماتنفذوش على المشروع الحقيقي** |
@@ -77,6 +78,15 @@
     - مسح قياس مسح صورته بعد دقيقة «تراجع».
     - العربي.
     - مسح الحساب من الأبلكيشن مسح كل الصور من Storage.
+- **المرحلة ٦ (الاشتراكات):**
+  - **`0005_subscriptions.sql` اتطبق**، وفيه مهمة `gymlog-renewals` كل يوم الساعة 07:07 UTC.
+  - **الاختبار على المشروع الحقيقي** بحسابات وهمية اتمسحت بعدها، و١٨ من ١٨ نجحوا:
+    - الكابتن سجّل شهر من اللوحة.
+    - بعد آخر يوم مدفوع، تمرين المتدرب الجديد ماظهرش للكابتن، والقديم ظهر.
+    - الكابتن مقدرش يكتب تعليق ولا يبعت برنامج.
+    - المتدرب شاف «اشتراكك خلص».
+    - دفعة ٣ شهور بدأت من النهارده، ورجّعت كل حاجة.
+    - تذكير «بيخلص بعد ٣ أيام» وصل للـ function ولـ Google مرة واحدة بس.
 - **إعدادات الدخول:**
   - Site URL هو `https://abohamada15423.github.io/gym-log/`.
   - Redirect URLs هي الموقع و`localhost:8000` و`localhost:8765`.
@@ -161,6 +171,8 @@ What the tests prove (one test each):
 
 The suite was also checked against eleven deliberate breakages of the migration (anon access, missing `search_path`, coach editing client comments, writable `read_at`, editable `role`, older edits winning, re-activating archived links, reusable invites, invites reusable after account deletion, checking the code before the existing coach, coaches reading other folders). Each one made a test fail.
 
+Phase 6 (`0005_subscriptions.sql`): only the coach records payments, each running on from the last paid day (or today, once ended), with friendly refusals; only the latest can be taken back; after the last paid day the coach reads only rows (workouts, meals, check-ins, habits, comments, photos) dated up to it, can't write programs, meal plans or comments, and isn't woken by the client's comments; a payment brings back everything, including what was logged meanwhile; renewal reminders three days before and the day after, once each, not for paused clients; a new invite starts without the old subscription. Checked against ten deliberate breakages, each caught.
+
 Phase 5 (`0004_progress_photos.sql`): a check-in holds up to three photos, named the way the app names them (another pose, a path out of the folder, someone else's folder or another file type is refused); the bucket takes photos up to 2 MB only and stays private.
 
 Phase 4 (`0003_comments_push.sql`) adds seven more:
@@ -192,4 +204,4 @@ Keep the VAPID keys as they are: browsers subscribe with the public key, so new 
 
 ## Changing the schema later
 
-Add a new file, `migrations/0005_<what>.sql`. Don't edit a migration that already ran on the project. Add tests for any new rule to `tests/rls.test.cjs` and run `npm run test:db` before applying the file in the SQL editor.
+Add a new file, `migrations/0006_<what>.sql`. Don't edit a migration that already ran on the project. Add tests for any new rule to `tests/rls.test.cjs` and run `npm run test:db` before applying the file in the SQL editor.

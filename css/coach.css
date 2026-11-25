@@ -236,3 +236,16 @@ a.crow:hover { background: var(--surface-2) }
 .c-photos { max-width: 440px }
 .c-photos .ph-stage { max-height: none }
 .c-entry .ph-thumbs { margin-top: 10px }
+
+/* ---------- subscriptions (phase 6) ---------- */
+/* ended reads in warning red, ending in gold: one is past, the other is coming */
+.c-bad, .c-flagcol .c-bad { color: var(--warn); font-weight: 600 }
+.c-soon { display: block; margin-top: 2px; color: var(--gold); font-weight: 700 }
+.c-ended { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 18px;
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line)) }
+.c-ended > div { flex: 1 1 320px; min-width: 0 }
+.c-ended > .btn { flex: none; width: auto }
+.c-ended b { color: var(--warn) }
+.c-ended p { margin: 4px 0 0; color: var(--muted) }
+.c-locked { margin-top: 14px }
+.pay-sheet .mchips .btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
